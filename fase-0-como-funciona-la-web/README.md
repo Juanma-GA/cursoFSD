@@ -157,3 +157,26 @@ Frameworks REST en Python:
 
 Para este ejercicio local solo se usa Uvicorn — la combinación completa 
 (Nginx + Gunicorn + Uvicorn) es propia de un despliegue en producción.
+
+#### ¿Cuándo necesito Nginx/Apache delante de Uvicorn?
+
+Para un ejercicio local como este (solo yo, en mi propia máquina), Uvicorn solo es 
+suficiente — no hace falta nada más. Nginx/Apache empiezan a ser necesarios cuando 
+aparece alguno de estos escenarios:
+
+1. **Varios usuarios simultáneos** (aunque sea tráfico interno de empresa, no de 
+   internet): Uvicorn solo gestiona un número limitado de conexiones eficientemente. 
+   Gunicorn + varios workers de Uvicorn reparten esa carga.
+2. **HTTPS**: en cuanto viajan contraseñas o datos sensibles por la red, aunque sea 
+   interna, se quiere cifrado — más fácil de configurar en Nginx que en Uvicorn directo.
+3. **Servir ficheros estáticos** (imágenes, CSS, JS compilado): Nginx lo hace mucho 
+   más rápido que dejar que el código Python se encargue.
+4. **Seguridad y control de acceso**: filtrar peticiones raras, limitar peticiones 
+   por segundo, ocultar detalles internos del backend.
+5. **Varios servicios detrás de una sola puerta**: si el CCMS tiene backend, buscador 
+   (Elasticsearch) y LLM local en puertos distintos, Nginx puede ser el único punto 
+   de entrada que decide a qué servicio va cada ruta.
+
+Regla práctica: Uvicorn/Gunicorn solos valen para desarrollo o una app interna muy 
+pequeña. En cuanto hay varios usuarios reales, HTTPS serio, estáticos que servir, 
+o varios servicios que unificar, se añade Nginx/Apache delante.
