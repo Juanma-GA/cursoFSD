@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Fase 0 — Hola mundo tres capas</title>
+</head>
+<body>
+  <h1>Ejercicio Fase 0: hola mundo tres capas</h1>
+  <p>Mensaje recibido de la API: <strong id="mensaje">(cargando...)</strong></p>
+
+  <script>
+    const API_URL = "http://localhost:8000/hola";
+
+    fetch(API_URL)
+      .then((respuesta) => respuesta.json())
+      .then((datos) => {
+        document.getElementById("mensaje").textContent = datos.mensaje;
+      })
+      .catch((error) => {
+        document.getElementById("mensaje").textContent = "Error al llamar a la API";
+        console.error(error);
+      });
+  </script>
+</body>
+</html>
