@@ -215,3 +215,27 @@ Nota para el proyecto CCMS: herramientas comerciales del sector (IXIASoft, Heret
 etc.) pueden estar construidas en cualquiera de estos — Java es especialmente 
 habitual en software empresarial de este tipo. No hace falta dominarlos, pero sí 
 reconocerlos en conversaciones técnicas con proveedores.
+
+## Conceptos finales antes de pasar a Fase 1
+
+### Qué es JSON
+Formato de texto para representar datos estructurados (pares clave-valor, listas, 
+texto, números, booleanos), que cualquier lenguaje de programación sabe leer y 
+escribir fácilmente. Es el formato casi universal en el que viajan los datos entre 
+frontend y backend hoy en día (metadatos, respuestas de API, etc.).
+
+### CORS (Cross-Origin Resource Sharing)
+Medida de seguridad del navegador: por defecto, JavaScript de una página de un 
+"origen" (ej. file:// o localhost:5500) tiene restringido hacer peticiones a un 
+servidor de otro "origen" (ej. localhost:8000), salvo que ese servidor lo permita 
+explícitamente mediante cabeceras HTTP específicas. Es una causa común de errores 
+al conectar frontend y backend en desarrollo, y se configura en el propio backend.
+
+### Síncrono vs asíncrono (a nivel de concepto)
+- **Síncrono**: el cliente hace una petición y espera bloqueado hasta recibir 
+  respuesta antes de poder hacer nada más.
+- **Asíncrono**: el servidor puede seguir atendiendo otras peticiones mientras una 
+  tarea larga (ej. una llamada a un LLM) se procesa en segundo plano, sin bloquear 
+  todo el sistema.
+- Relevante para la Fase 1: es la base conceptual de por qué se usan colas de 
+  trabajo (Celery, RQ) para tareas lentas como generar un PDF o llamar al LLM.
