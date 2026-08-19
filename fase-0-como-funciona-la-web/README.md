@@ -109,3 +109,51 @@ Si abres las DevTools del navegador (pestaña **Network**/Red) mientras cargas `
 2. Backend recibe el POST, valida el JSON
 3. Backend → Base de datos (protocolo específico, ej. SQL INSERT) → aquí queda persistido de verdad
 4. Backend → Frontend (respuesta HTTP 200) → "guardado correctamente"
+
+## Explicación del ejercicio
+
+Este mini-proyecto de tres capas monta, en pequeño, el mismo esquema cliente-servidor que tendrá cualquier aplicación del curso. La capa `api/` es una aplicación FastAPI que define un único endpoint, `GET /hola`, cuya lógica es simplemente devolver el JSON `{"mensaje": "hola mundo"}`; ese código por sí solo no escucha nada de la red, solo describe qué debe pasar cuando llega esa petición. Uvicorn es quien realmente levanta un servidor y se pone a escuchar en `localhost:8000`, recibiendo las peticiones HTTP entrantes y pasándoselas a FastAPI para que las resuelva. La capa `frontend/` es un HTML sencillo con JavaScript que, al cargarse en el navegador, ejecuta un `fetch()` contra `http://localhost:8000/hola` y, cuando llega la respuesta, vuelca el mensaje recibido en la página. El flujo completo para probarlo es: instalar las librerías de `requirements.txt` → levantar el servidor con `uvicorn main:app --reload` → abrir `index.html` en el navegador (o servirlo con un servidor estático) → el JavaScript del frontend hace el `fetch()` a la API → el navegador muestra en pantalla el mensaje `hola mundo` que llegó como JSON. Es, en miniatura, la misma separación cliente/servidor que se usará en el resto del curso, solo que aquí no hay base de datos ni lógica de negocio, únicamente el "hola mundo" para ver el flujo completo funcionando de punta a punta.
+
+## Tipos de frameworks de API y servidores
+
+### Frameworks de API (por estilo de arquitectura)
+
+**REST** (el usado en este curso)
+- Recursos por URL, verbos HTTP, normalmente JSON.
+- Ventajas: estándar universal, fácil de entender, cacheable.
+- Inconvenientes: puede requerir varias llamadas para datos relacionados.
+
+**GraphQL**
+- El cliente pide exactamente los campos que necesita, un único endpoint.
+- Ventajas: evita sobre/infra-fetching de datos.
+- Inconvenientes: más complejo de montar y cachear.
+
+**gRPC**
+- Binario (protobuf), pensado para comunicación entre microservicios internos.
+- Ventajas: rendimiento muy alto, tipado fuerte.
+- Inconvenientes: no lo consume un navegador directamente, difícil de depurar.
+
+**SOAP**
+- Basado en XML, contratos formales (WSDL), común en sistemas legacy/banca/gobierno.
+- Ventajas: estándares fuertes de seguridad y transacciones.
+- Inconvenientes: pesado y verboso para APIs nuevas.
+
+Frameworks REST en Python:
+- **FastAPI** (usado aquí): moderno, tipado, documentación automática, asíncrono.
+- **Flask**: minimalista y flexible, pero hay que añadir manualmente validación/docs.
+- **Django REST Framework**: todo incluido (admin, ORM, auth), más pesado.
+
+### Servidores
+
+**Servidor de aplicación** (ejecuta el código Python):
+- **Uvicorn** (usado aquí): ASGI, asíncrono, rápido con concurrencia.
+- **Gunicorn**: WSGI, síncrono, maduro, buena gestión de múltiples procesos. 
+  En producción con FastAPI se suele usar Gunicorn gestionando workers de Uvicorn.
+
+**Servidor web / proxy inverso** (delante del servidor de aplicación):
+- **Nginx**: sirve ficheros estáticos, gestiona HTTPS/seguridad, reenvía peticiones 
+  dinámicas al servidor de aplicación. Eficiente con miles de conexiones.
+- **Apache**: alternativa más antigua, más "todo en uno", generalmente más pesado.
+
+Para este ejercicio local solo se usa Uvicorn — la combinación completa 
+(Nginx + Gunicorn + Uvicorn) es propia de un despliegue en producción.
