@@ -180,3 +180,38 @@ aparece alguno de estos escenarios:
 Regla práctica: Uvicorn/Gunicorn solos valen para desarrollo o una app interna muy 
 pequeña. En cuanto hay varios usuarios reales, HTTPS serio, estáticos que servir, 
 o varios servicios que unificar, se añade Nginx/Apache delante.
+
+## Lenguajes de backend más usados actualmente
+
+**Python** (el usado en este curso): versátil, muy usado en web, datos e IA. 
+Frameworks: FastAPI, Django, Flask. Ventaja: legible, ecosistema enorme. 
+Inconveniente: más lento en ejecución pura que lenguajes compilados.
+
+**JavaScript / TypeScript (Node.js)**: mismo lenguaje que el frontend, ejecutado en 
+el servidor. Frameworks: Express, NestJS. Ventaja: un solo lenguaje para frontend 
+y backend. Inconveniente: tipado débil en JS puro (TypeScript lo corrige).
+
+**PHP**: veterano de la web, WordPress y buena parte de internet corren sobre él. 
+Framework moderno: Laravel. Ventaja: muy extendido, fácil de desplegar. 
+Inconveniente: reputación de código legacy desordenado (menos cierto en PHP moderno).
+
+**Java**: muy común en entornos empresariales grandes (banca, seguros, corporativo). 
+Framework: Spring Boot. Ventaja: robusto, tipado fuerte, rendimiento a gran escala. 
+Inconveniente: más verboso y pesado de arrancar que Python/Node.
+
+**C# (.NET)**: equivalente de Microsoft a Java. Framework: ASP.NET Core. 
+Ventaja: gran integración si la empresa ya usa Windows Server/Azure. 
+Inconveniente: históricamente menos neutral (aunque .NET Core ya es multiplataforma).
+
+**Go**: pensado para rendimiento y concurrencia, muy usado en infraestructura 
+(Docker, Kubernetes están escritos en Go). Ventaja: muy rápido, compila a un único 
+binario. Inconveniente: ecosistema más joven, menos "todo incluido".
+
+**Ruby**: conocido por Ruby on Rails, popular hace una década, hoy en declive 
+relativo pero vivo. Ventaja: velocidad de desarrollo muy alta. 
+Inconveniente: menos demanda laboral actual.
+
+Nota para el proyecto CCMS: herramientas comerciales del sector (IXIASoft, Heretto, 
+etc.) pueden estar construidas en cualquiera de estos — Java es especialmente 
+habitual en software empresarial de este tipo. No hace falta dominarlos, pero sí 
+reconocerlos en conversaciones técnicas con proveedores.
