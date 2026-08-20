@@ -146,6 +146,22 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
+**Qué hace cada comando:**
+
+1. **`python -m venv venv`**: crea un entorno virtual — una carpeta con su propia 
+   instalación aislada de Python y librerías, separada del Python global del 
+   sistema. Evita conflictos entre proyectos que necesiten versiones distintas 
+   de las mismas librerías.
+2. **`source venv/bin/activate`** (Linux/Mac) o **`venv\Scripts\activate`** 
+   (Windows): activa el entorno virtual en la terminal actual. A partir de aquí, 
+   cualquier `pip install` o `python` usa la copia aislada, no la global. El 
+   prompt de la terminal suele mostrar `(venv)` cuando está activo.
+3. **`pip install -r requirements.txt`**: instala las librerías del proyecto 
+   (fastapi, uvicorn...) dentro del entorno virtual ya activado.
+4. **`uvicorn main:app --reload`**: arranca el servidor usando la variable `app` 
+   de main.py. A diferencia de la Fase 0, aquí no hace falta `python -m` delante 
+   porque el entorno virtual activado ya deja `uvicorn` accesible directamente.
+
 La API queda disponible en `http://localhost:8000`. FastAPI genera documentación 
 interactiva automática en `http://localhost:8000/docs`, donde se pueden probar 
 los tres endpoints directamente desde el navegador.
@@ -161,3 +177,90 @@ curl http://localhost:8000/topics
 
 curl -X POST http://localhost:8000/topics/1/mejorar
 ```
+
+## Preguntas frecuentes del ejercicio
+
+### ¿Por qué necesito schemas.py si ya tengo los routers?
+
+Son cosas distintas aunque parezca que se solapan. El router (routers/topics.py) 
+define **qué URL responde a qué función** — la puerta de entrada. Pero necesita 
+saber **qué forma tienen los datos** que entran y salen por esa puerta, y eso es 
+lo que hace schemas.py mediante clases Pydantic:
+
+```python
+# schemas.py
+from pydantic import BaseModel
+
+class TopicCreate(BaseModel):
+    titulo: str
+    contenido: str
+
+class TopicResponse(BaseModel):
+    id: int
+    titulo: str
+    contenido: str
+```
+
+Y el router lo usa así:
+
+```python
+# routers/topics.py
+@router.post("/topics", response_model=TopicResponse)
+def crear_topic(topic: TopicCreate):
+    ...
+```
+
+Lo que da esto gratis, sin escribir lógica manual:
+1. **Validación automática**: si el JSON recibido no cumple el schema (falta un 
+   campo, tipo incorrecto), FastAPI rechaza la petición con un 422 antes de que 
+   el código propio se ejecute.
+2. **Documentación automática**: los campos que aparecen en /docs salen 
+   directamente de los schemas.
+3. **Contrato separado del modelo interno**: TopicCreate (lo que se recibe) y 
+   TopicResponse (lo que se devuelve) pueden diferir — por ejemplo, TopicResponse 
+   incluye el id, que no existe todavía al crear. Mantener el schema público 
+   separado del modelo de dominio (Topic en storage/) da libertad para que 
+   evolucionen por separado.
+
+Resumen: el router decide a dónde va la petición; el schema decide qué forma 
+deben tener los datos que viajan por ahí.
+
+### ¿Cómo se crea el "storage temporal"?
+
+No es una base de datos ni nada especial — es una estructura de datos de Python 
+que vive en la memoria del proceso mientras el servidor está corriendo 
+(storage/memory_store.py):
+
+```python
+# storage/memory_store.py
+from dataclasses import dataclass
+
+@dataclass
+class Topic:
+    id: int
+    titulo: str
+    contenido: str
+
+class MemoryStore:
+    def __init__(self):
+        self._topics: dict[int, Topic] = {}
+        self._siguiente_id = 1
+
+    def crear(self, titulo: str, contenido: str) -> Topic:
+        topic = Topic(id=self._siguiente_id, titulo=titulo, contenido=contenido)
+        self._topics[topic.id] = topic
+        self._siguiente_id += 1
+        return topic
+
+    def listar(self) -> list[Topic]:
+        return list(self._topics.values())
+```
+
+La clave: ese diccionario `self._topics` es una variable Python normal que vive 
+en RAM mientras uvicorn está corriendo. Al parar o reiniciar el servidor, se 
+destruye y todos los topics desaparecen — no hay fichero ni base de datos real 
+detrás. Es deliberadamente simple para centrar el ejercicio en la arquitectura 
+por capas antes de meter persistencia real. En la Fase 2, este MemoryStore se 
+sustituirá por un repositorio que hable con PostgreSQL (o una BD XML nativa), 
+sin que routers ni services cambien una sola línea — porque solo dependen de la 
+interfaz (crear, listar), no de cómo se implementa por dentro.
