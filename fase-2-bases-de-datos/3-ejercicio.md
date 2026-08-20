@@ -261,6 +261,27 @@ Sí, SQLAlchemy es exactamente eso: un ORM para Python (el más usado del
 ecosistema, junto a alternativas como el ORM integrado en Django). No es el 
 único ORM que existe — es la elección específica usada en este proyecto.
 
+#### Panorama de ORMs por lenguaje
+
+Todos comparten el mismo concepto de fondo (clases ↔ tablas), pero varían en 
+cuánto automatizan frente a cuánto control fino dejan sobre el SQL generado.
+
+- **Python**: SQLAlchemy (el más completo y flexible, usado en este proyecto), 
+  Django ORM (integrado en Django, más "todo incluido" pero menos flexible 
+  fuera de Django), Tortoise ORM (pensado para async nativo).
+- **JavaScript/TypeScript (Node.js)**: Prisma (muy popular actualmente, genera 
+  tipos automáticamente), Sequelize (más veterano), TypeORM.
+- **Java**: Hibernate (estándar de facto desde hace años, muy usado en 
+  entornos empresariales tipo Spring Boot, mencionado en la Fase 1).
+- **C# (.NET)**: Entity Framework (ORM oficial de Microsoft).
+- **Ruby**: ActiveRecord (integrado en Ruby on Rails, muy influyente en cómo 
+  se diseñaron ORMs posteriores).
+
+Nota: SQLAlchemy es conocido por ofrecer ambos extremos — se puede trabajar a 
+muy alto nivel (clases y consultas simples) o bajar a escribir SQL casi puro 
+cuando hace falta control fino. Parte de por qué se recomienda junto a 
+FastAPI.
+
 ### SQLAlchemy (ORM) vs escribir el SQL a mano: ejemplo concreto
 
 Con SQL puro, crear la tabla `revisiones` sería un archivo `.sql` aparte:
