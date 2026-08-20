@@ -418,49 +418,95 @@ prueba, creada automáticamente), y una fila en `revisiones` (ahí sí, con el
 conceptos" de `2-construccion_esquema_bd.md`: el contenido vive en la 
 revisión, no en el objeto.
 
-### Qué da SQLAlchemy (ORM) frente a escribir el SQL a mano
+## Comandos para probar la migración contra Docker local
 
-En general, para las 9 tablas, el ORM aporta lo mismo: cada tabla se define 
-una sola vez como una clase Python, y de ahí sale tanto el `CREATE TABLE` 
-como la forma de consultar/insertar datos, sin mantener dos versiones 
-separadas (el SQL y el código) sincronizadas a mano. Con SQL puro, cada 
-`CREATE TABLE ... REFERENCES ...` es un archivo `.sql` aparte que hay que 
-ejecutar en el orden correcto (las tablas que reciben FK antes que las que 
-las declaran) y mantener manualmente sincronizado con el código Python que 
-las usa.
+Estos son los pasos para validar, en la propia máquina, que el backend se 
+conecta correctamente al contenedor Docker ccms-postgres (en vez de al 
+PostgreSQL nativo del sandbox usado para la validación inicial).
 
-Diferencias concretas, tabla por tabla:
+### 1. Verificar que el contenedor está corriendo
 
-- **`objetos_contenido` / `autores` / `estados`** (tablas sin FK propias): 
-  aquí el ORM aporta sobre todo el mapeo de tipos (`String(20)` → 
-  `VARCHAR(20)`, `Integer` PK → `SERIAL`) sin tener que memorizar la sintaxis 
-  exacta de PostgreSQL, y `unique=True` (en `autores.email`, 
-  `estados.nombre`) genera la restricción `UNIQUE` sin escribir 
-  `ALTER TABLE ... ADD CONSTRAINT` aparte.
+```bash
+docker ps
+```
 
-- **`revisiones` / `versiones` / `objeto_estado` / `baseline_version` / 
-  `mapa_topic_refs`** (tablas con una o varias FK): `ForeignKey("tabla.id")` 
-  genera la restricción de clave foránea automáticamente, y 
-  `Base.metadata.create_all()` calcula solo el orden correcto de creación 
-  según esas dependencias — con SQL a mano, ese orden hay que deducirlo y 
-  respetarlo uno mismo, o la base de datos rechaza la tabla que use una FK 
-  hacia otra que aún no existe. `mapa_topic_refs` es el caso más cargado de 
-  FK (a `revisiones`, dos veces a `objetos_contenido`/`versiones`): con el 
-  ORM cada una queda declarada junto a su columna, en vez de agrupadas al 
-  final del `CREATE TABLE` como en SQL puro.
+Si `ccms-postgres` no aparece en la lista:
 
-- **`baselines`**: tiene FK hacia dos tablas distintas (`objetos_contenido` y 
-  `revisiones`) — el modelo Python queda como documentación viva de esa 
-  relación; no hace falta volver al diagrama Mermaid para recordar qué 
-  apunta a qué mientras se escribe código.
+```bash
+docker start ccms-postgres
+```
 
-- En todas: las consultas se escriben como `db.query(Modelo).filter_by(...)` 
-  en vez de componer strings SQL a mano, lo que evita construir SQL por 
-  concatenación (fuente común de inyección SQL) — SQLAlchemy parametriza los 
-  valores automáticamente.
+### 2. Actualizar el repositorio local
 
-Lo que el ORM NO cambia: los tipos de datos y restricciones siguen siendo 
-decisión de quien diseña el esquema (por eso `2-construccion_esquema_bd.md` 
-sigue teniendo una sección "Pendiente de decidir" con NOT NULL/UNIQUE/CHECK 
-por definir) — SQLAlchemy solo traduce esa decisión a SQL real, no la toma 
-por ti.
+```bash
+git checkout main
+git pull
+```
+
+### 3. Crear y activar un entorno virtual para este proyecto
+
+```bash
+cd fase-2-bases-de-datos/api
+python -m venv venv
+venv\Scripts\activate
+```
+
+Cada fase usa su propio entorno virtual, aislado del resto (ver Fase 0/1 para 
+el porqué).
+
+### 4. Instalar dependencias
+
+```bash
+pip install -r requirements.txt
+```
+
+Instala FastAPI, Uvicorn, SQLAlchemy y psycopg2-binary dentro del entorno 
+virtual activado.
+
+### 5. Crear las tablas en el PostgreSQL real de Docker
+
+```bash
+python crear_tablas.py
+```
+
+Ejecuta `Base.metadata.create_all()`, que se conecta usando la DATABASE_URL de 
+database.py (`postgresql+psycopg2://postgres:curso123@localhost:5432/ccms`) y 
+crea las 9 tablas en el contenedor Docker, respetando automáticamente el orden 
+de dependencias por las FK. Si falla aquí, suele ser un problema de conexión 
+(contenedor no arrancado, puerto o credenciales distintas).
+
+### 6. Verificar las tablas con psql
+
+```bash
+docker exec -it ccms-postgres psql -U postgres -d ccms
+```
+
+Dentro de la sesión interactiva:
+
+```
+\dt
+```
+
+Debe listar las 9 tablas. Para salir:
+
+```
+\q
+```
+
+### 7. Levantar el servidor
+
+```bash
+uvicorn main:app --reload
+```
+
+### 8. Prueba real de persistencia
+
+1. Abrir `http://localhost:8000/docs`
+2. Crear un topic con `POST /topics`
+3. Parar el servidor con `Ctrl+C`
+4. Volver a arrancarlo: `uvicorn main:app --reload`
+5. Comprobar con `GET /topics` que el topic sigue apareciendo
+
+Si el topic persiste tras el reinicio, queda confirmado que la migración 
+funciona de verdad contra el contenedor Docker local, no solo contra el 
+entorno de validación inicial.
