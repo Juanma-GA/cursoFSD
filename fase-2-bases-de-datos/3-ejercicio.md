@@ -224,6 +224,134 @@ un ditamap, tal como especifica `2-construccion_esquema_bd.md`).
 > crear_tablas.py` y los mismos comandos `docker exec -it ccms-postgres psql 
 > ...` funcionarán sin ningún cambio.
 
+## Preguntas frecuentes: psql, ORM y SQLAlchemy vs SQL puro
+
+### ¿Qué es psql?
+
+Un cliente de línea de comandos para hablar directamente con PostgreSQL — no 
+es un visualizador gráfico (eso sería una herramienta como pgAdmin). Con psql 
+se escribe SQL a mano y se ve el resultado como texto en la terminal, o se 
+usan comandos especiales como `\dt` (listar tablas).
+
+`psql` no está instalado en la máquina local — está dentro de la imagen 
+oficial de PostgreSQL que corre en el contenedor Docker. Por eso se ejecuta 
+así:
+
+```bash
+docker exec -it ccms-postgres psql -U postgres -d ccms
+```
+
+`docker exec` significa "ejecuta un comando DENTRO de un contenedor que ya 
+está corriendo" — en este caso, ejecuta el programa `psql` (ya instalado 
+dentro de la imagen de PostgreSQL) contra la base de datos propia, con el 
+usuario `postgres` y la base `ccms`. El flag `-it` hace la sesión interactiva 
+(escribir comandos y ver respuestas en vivo). Es psql "viviendo dentro" de 
+Docker, no algo que se instale aparte en Windows.
+
+### ¿Qué es un ORM? ¿SQLAlchemy es un tipo de ORM?
+
+**ORM = Object-Relational Mapper** (Mapeador Objeto-Relacional): patrón que 
+traduce entre dos mundos que no encajan de forma natural — el mundo 
+relacional (tablas, filas, columnas, cómo piensa PostgreSQL) y el mundo 
+orientado a objetos (clases, instancias, atributos, cómo piensa Python). Un 
+ORM permite trabajar con objetos Python normales (`topic.titulo`) y traduce 
+eso por debajo a SELECT/INSERT/UPDATE en SQL.
+
+Sí, SQLAlchemy es exactamente eso: un ORM para Python (el más usado del 
+ecosistema, junto a alternativas como el ORM integrado en Django). No es el 
+único ORM que existe — es la elección específica usada en este proyecto.
+
+### SQLAlchemy (ORM) vs escribir el SQL a mano: ejemplo concreto
+
+Con SQL puro, crear la tabla `revisiones` sería un archivo `.sql` aparte:
+
+```sql
+CREATE TABLE revisiones (
+    id SERIAL PRIMARY KEY,
+    objeto_id INTEGER REFERENCES objetos_contenido(id),
+    autor_id INTEGER REFERENCES autores(id),
+    contenido TEXT,
+    fecha TIMESTAMP
+);
+```
+
+Y, por separado, el código Python para usarla:
+
+```python
+cursor.execute(
+    "INSERT INTO revisiones (objeto_id, autor_id, contenido, fecha) VALUES (%s, %s, %s, %s)",
+    (1, 2, "texto", fecha)
+)
+```
+
+Problema: son dos archivos separados que describen "lo mismo" con sintaxis 
+distinta. Si se añade una columna, hay que acordarse de cambiarla en los dos 
+sitios — si se olvida uno, el código y la base de datos quedan 
+desincronizados sin aviso hasta que falla en producción.
+
+Con SQLAlchemy, se escribe una sola vez:
+
+```python
+class Revision(Base):
+    __tablename__ = "revisiones"
+    id = Column(Integer, primary_key=True)
+    objeto_id = Column(Integer, ForeignKey("objetos_contenido.id"))
+    autor_id = Column(Integer, ForeignKey("autores.id"))
+    contenido = Column(Text)
+    fecha = Column(DateTime)
+```
+
+Esa misma clase sirve para generar el `CREATE TABLE` (al ejecutar 
+crear_tablas.py) y para leer/escribir datos en el código 
+(`db.query(Revision).filter_by(objeto_id=1)`) — un único sitio de verdad.
+
+**Sobre el orden de creación de tablas**: con SQL a mano, si una tabla con FK 
+(ej. mapa_topic_refs, que referencia revisiones) se ejecuta antes de que 
+exista la tabla referenciada, PostgreSQL rechaza el CREATE TABLE. Con 9 tablas 
+y FKs cruzadas, calcular ese orden a mano es tedioso y propenso a error. 
+`Base.metadata.create_all()` lo calcula automáticamente según las 
+dependencias entre las clases.
+
+**Sobre la prevención de inyección SQL**: construir SQL concatenando texto 
+directamente es peligroso:
+
+```python
+query = f"SELECT * FROM topics WHERE titulo = '{titulo_usuario}'"
+```
+
+Si el valor de `titulo_usuario` contiene algo como `' OR '1'='1`, la consulta 
+cambia de significado por completo, exponiendo datos que no debería. 
+SQLAlchemy trata siempre el valor como un dato separado, nunca como parte del 
+texto de la consulta — a esto se refiere "parametriza los valores 
+automáticamente".
+
+### Diferencias concretas, tabla por tabla
+
+- `objetos_contenido` / `autores` / `estados` (sin FK propias): el ORM aporta 
+  sobre todo el mapeo de tipos (`String(20)` → `VARCHAR(20)`, `Integer` PK → 
+  `SERIAL`) sin memorizar la sintaxis exacta de PostgreSQL, y `unique=True` 
+  (en `autores.email`, `estados.nombre`) genera la restricción UNIQUE sin 
+  escribir `ALTER TABLE ... ADD CONSTRAINT` aparte.
+- `revisiones` / `versiones` / `objeto_estado` / `baseline_version` / 
+  `mapa_topic_refs` (con una o varias FK): `ForeignKey("tabla.id")` genera la 
+  restricción de clave foránea automáticamente, y `create_all()` calcula el 
+  orden correcto de creación según esas dependencias. `mapa_topic_refs` es el 
+  caso más cargado de FK (a revisiones, dos veces a objetos_contenido/
+  versiones): con el ORM cada una queda declarada junto a su columna, en vez 
+  de agrupadas al final del CREATE TABLE como en SQL puro.
+- `baselines`: FK hacia dos tablas distintas (objetos_contenido y revisiones) 
+  — el modelo Python queda como documentación viva de esa relación, sin 
+  necesidad de volver al diagrama Mermaid mientras se escribe código.
+- En todas: las consultas se escriben como `db.query(Modelo).filter_by(...)` 
+  en vez de componer strings SQL a mano.
+
+### Lo que el ORM NO cambia
+
+Los tipos de datos y restricciones siguen siendo decisión de quien diseña el 
+esquema (por eso 2-construccion_esquema_bd.md sigue teniendo una sección 
+"Pendiente de decidir" con NOT NULL/UNIQUE/CHECK por definir) — SQLAlchemy 
+solo traduce esa decisión a SQL real, no la toma automáticamente.
+
 ### Prueba end-to-end realizada
 
 Con la API levantada (`uvicorn main:app --reload`) contra la base de datos 
