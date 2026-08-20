@@ -345,3 +345,36 @@ para quién:
   que el usuario necesite saber qué es un endpoint o un JSON.
 
 Ambos son "frontend" en sentido estricto, pero cumplen roles distintos.
+
+## ¿Dónde están físicamente los datos en memoria?
+
+Los topics creados con este ejercicio no se guardan en ningún fichero ni base de 
+datos: viven en la RAM del proceso de uvicorn, dentro del diccionario 
+`self._topics` de `storage/memory_store.py`. Al parar el servidor (Ctrl+C) y 
+volver a arrancarlo, la lista vuelve a estar vacía — es fácil de comprobar 
+haciendo GET /topics antes y después de reiniciar.
+
+### ¿Se puede "ver" ese contenido directamente en la RAM?
+
+Técnicamente existe ahí, pero no de forma práctica: la RAM no está organizada en 
+archivos legibles como el disco — es una secuencia de bytes que solo tiene 
+sentido para el intérprete de Python que la gestiona.
+
+Formas indirectas de inspeccionarlo (más para curiosidad que uso práctico):
+1. **Un `print()` temporal en el código** (ej. en memory_store.py) — lo más 
+   directo y útil para depurar.
+2. **Gestor de tareas / Process Explorer** — muestra cuánta memoria usa el 
+   proceso, no su contenido legible.
+3. **Volcados de memoria (memory dump)** — terreno de depuración avanzada, sin 
+   aplicación práctica en este contexto.
+
+La forma real y normal de "ver los datos" en el día a día de desarrollo es 
+siempre a través de la propia aplicación: el endpoint GET /topics es exactamente 
+eso — preguntarle al backend qué tiene guardado, y que él lo devuelva en un 
+formato legible (JSON). El backend es la única pieza con acceso directo a sus 
+propios datos.
+
+Esto es también el motivo por el que la Fase 2 importa: con una base de datos 
+real, sí se pueden ver físicamente los datos de otra forma — por ejemplo, 
+abriendo pgAdmin (PostgreSQL) y navegando visualmente tablas y filas, algo 
+imposible por diseño con datos solo-en-RAM.
