@@ -142,6 +142,68 @@ puede pertenecer a varias líneas de versión a la vez), más una tabla de
 historial/revisiones por topic — el mismo patrón confirmado como estándar de 
 facto del sector.
 
+## Instalación de PostgreSQL: nativo vs Docker
+
+### Instalación nativa
+El instalador oficial de PostgreSQL para Windows lo instala como un servicio 
+del sistema que arranca automáticamente.
+- Ventajas: más simple al principio, no requiere conocer Docker, arranca solo.
+- Inconvenientes: queda instalado permanentemente, ocupa un servicio en segundo 
+  plano continuo, "empezar de cero" implica desinstalar/reinstalar, no está 
+  aislado del resto del sistema.
+
+### Vía Docker (contenedor)
+PostgreSQL corre dentro de un contenedor: un entorno aislado, ligero, separado 
+del sistema operativo, en vez de instalarse directamente en él.
+- Ventajas: completamente aislado (borrar y empezar de cero es instantáneo), 
+  se pueden tener varias versiones en paralelo sin conflicto, es como se 
+  despliega en producción en la mayoría de empresas hoy en día, arranque con 
+  un solo comando.
+- Inconvenientes: requiere tener Docker instalado, no arranca solo al encender 
+  el ordenador (hay que levantarlo), añade una capa conceptual extra.
+
+### Decisión para este curso
+Se usa Docker en este ejercicio: en muchos entornos corporativos con permisos 
+restringidos, un instalador nativo que requiere admin puede estar bloqueado, 
+mientras que Docker Desktop suele funcionar sin problema. Esto además adelanta 
+de forma práctica parte de lo que se verá con más profundidad en la Fase 5.
+
+### Instrucciones: levantar PostgreSQL con Docker
+
+1. Instalar Docker Desktop desde https://www.docker.com/products/docker-desktop/
+
+2. Levantar PostgreSQL con un solo comando:
+
+```bash
+docker run --name ccms-postgres -e POSTGRES_PASSWORD=curso123 -e POSTGRES_DB=ccms -p 5432:5432 -d postgres
+```
+
+Qué hace cada parte:
+- `docker run`: crea y arranca un contenedor nuevo
+- `--name ccms-postgres`: nombre del contenedor para gestionarlo después
+- `-e POSTGRES_PASSWORD=curso123`: variable de entorno con la contraseña del 
+  usuario admin de PostgreSQL
+- `-e POSTGRES_DB=ccms`: crea automáticamente una base de datos llamada `ccms`
+- `-p 5432:5432`: conecta el puerto 5432 de la máquina local con el puerto 5432 
+  dentro del contenedor (puerto por defecto de PostgreSQL)
+- `-d`: corre el contenedor en segundo plano (detached), sin bloquear la terminal
+- `postgres`: imagen oficial de PostgreSQL, descargada automáticamente la 
+  primera vez
+
+3. Comandos útiles:
+
+```bash
+docker ps                    # ver contenedores corriendo ahora mismo
+docker stop ccms-postgres    # parar el contenedor
+docker start ccms-postgres   # volver a arrancarlo (sin repetir 'docker run')
+docker logs ccms-postgres    # ver qué pasa dentro, útil para depurar
+```
+
+4. El backend se conecta a este PostgreSQL exactamente igual que si estuviera 
+instalado de forma nativa: desde el código Python, localhost:5432 es 
+indistinguible entre ambas opciones — Docker mapea el puerto de forma 
+transparente.
+
 ## Ejercicio
 
 ### Objetivo
