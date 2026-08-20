@@ -313,9 +313,21 @@ Qué significa cada parte:
 Es el mismo mecanismo que usa Swagger UI por detrás al pulsar "Execute", o que 
 usa `fetch()` en JavaScript — aquí se escribe manualmente desde la terminal.
 
-### Nota sobre frontend
+### Nota sobre frontend: /docs también es un frontend
 
-Estos endpoints están listos para ser consumidos por cualquier cliente HTTP 
-(navegador, app, Oxygen). En este ejercicio no se construyó un frontend a 
-propósito, para centrar el trabajo en la arquitectura del backend. Un frontend 
-real que consuma esta API se aborda en la Fase 3 (dashboard en React).
+Técnicamente, /docs (Swagger UI) es un frontend: el navegador recibe HTML, CSS y 
+JavaScript, y ese JavaScript hace fetch() a los endpoints igual que cualquier 
+otro cliente. Cumple los tres elementos de la Fase 0 (cliente, servidor, HTTP 
+entre medias).
+
+La distinción real no es "frontend vs no-frontend", sino quién lo construyó y 
+para quién:
+- **/docs**: generado automáticamente por FastAPI a partir de los schemas y 
+  rutas, sin escribir una línea de código para ello. Es un **frontend de 
+  desarrollador**, pensado para probar/explorar la API rápidamente — no para el 
+  usuario final del CCMS.
+- **Frontend de producto** (Fase 3, React): construido a medida, pensado para la 
+  experiencia del usuario final (autor, revisor) — formularios y dashboard sin 
+  que el usuario necesite saber qué es un endpoint o un JSON.
+
+Ambos son "frontend" en sentido estricto, pero cumplen roles distintos.
