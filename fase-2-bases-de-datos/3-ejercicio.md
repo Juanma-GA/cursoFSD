@@ -510,3 +510,55 @@ uvicorn main:app --reload
 Si el topic persiste tras el reinicio, queda confirmado que la migración 
 funciona de verdad contra el contenedor Docker local, no solo contra el 
 entorno de validación inicial.
+
+## Validación final: pgAdmin conectado al Docker local
+
+Tras completar los pasos de "Comandos para probar la migración contra Docker 
+local" hasta el punto 8.1 (crear un topic vía Swagger UI), se validó 
+visualmente el resultado con pgAdmin.
+
+### Pasos seguidos
+
+1. Levantar el contenedor de pgAdmin (en una terminal aparte, sin detener 
+   uvicorn ni el contenedor de PostgreSQL):
+
+```bash
+docker run --name ccms-pgadmin -e PGADMIN_DEFAULT_EMAIL=admin@admin.com -e PGADMIN_DEFAULT_PASSWORD=admin123 -p 5050:80 -d dpage/pgadmin4
+```
+
+2. Acceso desde el navegador en `http://localhost:5050`, login con 
+   `admin@admin.com` / `admin123`.
+
+3. Registro del servidor en pgAdmin (click derecho en "Servers" → "Register" → 
+   "Server..."):
+   - Pestaña General → Name: `CCMS Local`
+   - Pestaña Connection:
+     - Host name/address: `host.docker.internal`
+     - Port: `5432`
+     - Maintenance database: `ccms`
+     - Username: `postgres`
+     - Password: `curso123`
+
+   Nota importante: se usa `host.docker.internal` y no `localhost` porque 
+   pgAdmin corre dentro de su propio contenedor — `localhost` desde dentro de 
+   ese contenedor buscaría PostgreSQL en el propio contenedor de pgAdmin, no 
+   en `ccms-postgres`. `host.docker.internal` es el nombre especial que Docker 
+   Desktop resuelve hacia la máquina anfitriona, permitiendo que un contenedor 
+   hable con otro de forma indirecta.
+
+4. Navegación: `CCMS Local` → `Databases` → `ccms` → `Schemas` → `public` → 
+   `Tables` → las 9 tablas visibles.
+
+5. Click derecho en `objetos_contenido` → "View/Edit Data" → "All Rows": el 
+   topic creado en el paso 8.1 de la guía de comandos aparece como fila real, 
+   visualizado directamente sin necesidad de SQL.
+
+### Resultado
+
+Confirmado visualmente: el backend, corriendo en local, se conecta 
+correctamente al contenedor Docker `ccms-postgres` (no al PostgreSQL nativo 
+del sandbox usado en la validación inicial de Claude Code), y los datos creados 
+vía la API quedan persistidos y son visibles tanto por psql como por pgAdmin.
+
+Con esto queda validada de extremo a extremo la migración de almacenamiento en 
+memoria (Fase 1) a PostgreSQL real (Fase 2).
