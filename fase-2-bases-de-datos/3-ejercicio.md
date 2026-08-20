@@ -95,6 +95,75 @@ Mismas credenciales que el contenedor Docker `ccms-postgres` descrito en
 `1-README.md` (sección "Instalación de PostgreSQL: nativo vs Docker") — 
 usuario `postgres`, password `curso123`, base de datos `ccms`, puerto `5432`.
 
+## Cómo interactúan SQLAlchemy, psycopg2 y Docker en cada petición
+
+### Dos capas distintas, no una sola
+
+SQLAlchemy no es "la forma en que Python habla con PostgreSQL" a bajo nivel — 
+es una capa por encima de eso. Hay dos niveles:
+
+- **El driver (nivel bajo)**: `psycopg2` — la librería que de verdad sabe 
+  hablar el protocolo de red específico de PostgreSQL: abre la conexión TCP, 
+  envía las consultas en el formato binario exacto que PostgreSQL espera, e 
+  interpreta la respuesta.
+- **SQLAlchemy (nivel alto, el ORM)**: permite escribir clases Python en vez 
+  de SQL a mano. Por debajo, cuando el código ejecuta algo como 
+  `session.add(topic)`, SQLAlchemy genera el SQL correspondiente y se lo 
+  entrega al driver para que lo envíe de verdad — SQLAlchemy no habla con la 
+  red por sí solo, delega eso en psycopg2.
+
+Es la misma relación de capas vista entre FastAPI y Uvicorn en la Fase 0: uno 
+define "qué hacer" (SQLAlchemy = las tablas como clases), el otro hace el 
+trabajo real de comunicación (psycopg2 = quien habla con el socket de red).
+
+### Sobre el sufijo "-binary" de psycopg2-binary
+
+Instala una versión ya compilada de la librería (más rápida de instalar, no 
+requiere compilador C en la máquina) en vez de compilarla desde el código 
+fuente. Recomendado para desarrollo y aprendizaje; en producción a veces se 
+prefiere compilar desde fuente por rendimiento/seguridad — detalle avanzado, 
+no relevante en esta fase.
+
+### La secuencia completa, paso a paso, en cada arranque y cada petición
+
+Al arrancar `uvicorn main:app --reload`:
+
+1. `main.py` importa `database.py`.
+2. `database.py` construye la conexión usando 
+   `DATABASE_URL = "postgresql+psycopg2://postgres:curso123@localhost:5432/ccms"`.
+3. SQLAlchemy lee esa URL. El prefijo `postgresql+psycopg2` no es decorativo: 
+   es la instrucción explícita de qué driver usar (SQLAlchemy soporta varios 
+   drivers distintos para PostgreSQL, ej. psycopg2 o asyncpg para código 
+   asíncrono).
+4. SQLAlchemy carga internamente la librería `psycopg2` instalada vía 
+   requirements.txt — sin ella instalada, este paso falla con error de módulo 
+   no encontrado.
+
+En cada petición que toca la base de datos (ej. `session.query(...)`):
+
+5. El código Python (vía las clases SQLAlchemy en models.py) pide una 
+   operación; SQLAlchemy la traduce a SQL real (ej. 
+   `SELECT * FROM objetos_contenido`).
+6. SQLAlchemy no envía esa sentencia por la red directamente — se la entrega 
+   a psycopg2.
+7. psycopg2 abre el socket TCP contra `localhost:5432`, habla el protocolo 
+   binario específico de PostgreSQL, envía la sentencia, y recibe la 
+   respuesta en bruto.
+8. Como el contenedor Docker mapea su puerto 5432 al 5432 de la máquina local 
+   (`-p 5432:5432` en el `docker run`), ese socket TCP llega exactamente al 
+   contenedor `ccms-postgres` — psycopg2 no sabe ni le importa que esté 
+   "dentro" de Docker, para él es solo una IP y un puerto.
+9. psycopg2 devuelve la respuesta cruda a SQLAlchemy, que la traduce de vuelta 
+   a objetos Python (instancias de las clases definidas en models.py) para 
+   que el resto del código los use con normalidad.
+
+### Resumen de la cadena completa
+
+Código Python (clases SQLAlchemy) → SQLAlchemy genera SQL → psycopg2 lo envía 
+por red usando el protocolo de PostgreSQL → llega al contenedor Docker vía el 
+puerto mapeado → PostgreSQL ejecuta la consulta → la respuesta vuelve por el 
+mismo camino en sentido inverso.
+
 ### Cómo crear las tablas
 
 Con el contenedor `ccms-postgres` corriendo y las dependencias instaladas 
