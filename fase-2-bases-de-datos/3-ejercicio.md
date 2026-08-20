@@ -248,6 +248,31 @@ usuario `postgres` y la base `ccms`. El flag `-it` hace la sesión interactiva
 (escribir comandos y ver respuestas en vivo). Es psql "viviendo dentro" de 
 Docker, no algo que se instale aparte en Windows.
 
+### pgAdmin (visualizador gráfico, alternativa a psql)
+
+pgAdmin es la interfaz gráfica de administración de PostgreSQL — permite ver 
+tablas, filas y columnas de forma visual (como un Excel navegable), en vez de 
+escribir comandos SQL a mano en terminal como con psql. Permite expandir 
+tablas, ver filas directamente, editar valores con doble clic, ejecutar 
+consultas con autocompletado, y ver visualmente las relaciones (FK) entre 
+tablas.
+
+No es necesario para este ejercicio (psql ya cubre la verificación necesaria: 
+`\dt`, `\d revisiones`, etc.) — es una comodidad visual para cuando interese 
+"pasear" por los datos de forma más intuitiva, especialmente útil con más 
+filas y relaciones complejas.
+
+#### Instalación vía Docker (opcional)
+
+```bash
+docker run --name ccms-pgadmin -e PGADMIN_DEFAULT_EMAIL=admin@admin.com -e PGADMIN_DEFAULT_PASSWORD=admin123 -p 5050:80 -d dpage/pgadmin4
+```
+
+Acceso desde el navegador en `http://localhost:5050`, login con esas 
+credenciales, y conexión a `ccms-postgres` con host `host.docker.internal` (o 
+la IP del contenedor), usuario `postgres`, contraseña `curso123` — las mismas 
+credenciales usadas en el resto de este ejercicio.
+
 ### ¿Qué es un ORM? ¿SQLAlchemy es un tipo de ORM?
 
 **ORM = Object-Relational Mapper** (Mapeador Objeto-Relacional): patrón que 
