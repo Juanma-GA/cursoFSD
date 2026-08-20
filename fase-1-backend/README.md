@@ -378,3 +378,59 @@ Esto es también el motivo por el que la Fase 2 importa: con una base de datos
 real, sí se pueden ver físicamente los datos de otra forma — por ejemplo, 
 abriendo pgAdmin (PostgreSQL) y navegando visualmente tablas y filas, algo 
 imposible por diseño con datos solo-en-RAM.
+
+## Checkpoint resuelto: microservicios vs monolito modular
+
+Pregunta del checkpoint: si un proveedor propone montar el CCMS en microservicios, 
+¿qué preguntas hacer para saber si tiene sentido o es sobre-ingeniería?
+
+### El criterio NO es el número de rutas/endpoints
+
+La mayoría del CCMS (topics, autores, workflow de revisión, metadatos, permisos) 
+puede convivir perfectamente bajo un mismo backend, organizado en carpetas dentro 
+de `services/` (como ya se hace en este ejercicio: `topics_service.py`, y en el 
+futuro `usuarios_service.py`, `workflow_service.py`, etc.), todos hablando con la 
+misma base de datos. Tener muchas rutas no justifica por sí solo separarlas en 
+procesos/servidores distintos.
+
+### Los criterios reales
+
+**1. ¿Tiene un ciclo de vida de despliegue distinto?**
+Piezas del CCMS con ritmo propio y sentido de separarse:
+- **Motor de búsqueda (Elasticsearch/OpenSearch)**: servicio externo por 
+  naturaleza, se indexa y consulta aparte del CRUD normal.
+- **Generación de publicaciones (DITA-OT → PDF/HTML)**: tarea pesada y lenta, 
+  caso de uso típico de colas de trabajo (Celery/RQ) — un *worker* separado del 
+  proceso web, para no bloquear otras peticiones mientras se genera un documento 
+  largo.
+- **LLM local**: si está desplegado on-premise, es casi por definición un 
+  servicio independiente (requisitos de hardware propios, ciclo de arranque 
+  propio); el backend lo consume vía API, igual que el mock de "mejorar" de 
+  este ejercicio.
+
+**2. ¿Necesita escalar de forma distinta al resto?**
+Si una parte del sistema recibe carga constante y otra solo se usa puntualmente, 
+mantenerlas juntas impide escalar una sin escalar la otra. Es una razón de 
+carga/rendimiento, no de organización de código.
+
+**3. ¿Lo mantiene un equipo distinto, con ritmo de cambios distinto?**
+Razón típica en empresas grandes con muchos equipos en paralelo. No aplica a un 
+proyecto de tamaño medio con un equipo pequeño.
+
+### Conclusión para el CCMS
+
+Para un CCMS de tamaño medio, no hay suficiente volumen de rutas para justificar 
+servicios independientes solo por eso. Un monolito modular resuelve la mayoría 
+del sistema. Los candidatos reales a vivir fuera del backend principal son: el 
+motor de búsqueda (tecnología distinta por naturaleza), el LLM local (requisitos 
+de hardware/despliegue), y posiblemente un worker separado para tareas largas 
+como la publicación (por rendimiento).
+
+### La pregunta clave para el proveedor
+
+"¿Qué pieza concreta necesita escalar, desplegarse, o ser mantenida de forma 
+independiente al resto — y por qué no basta con separarla en un módulo dentro 
+del mismo backend?"
+
+Si no hay una respuesta concreta, probablemente se está vendiendo complejidad 
+innecesaria.
