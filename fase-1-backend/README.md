@@ -146,6 +146,22 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
+**Qué hace cada comando:**
+
+1. **`python -m venv venv`**: crea un entorno virtual — una carpeta con su propia 
+   instalación aislada de Python y librerías, separada del Python global del 
+   sistema. Evita conflictos entre proyectos que necesiten versiones distintas 
+   de las mismas librerías.
+2. **`source venv/bin/activate`** (Linux/Mac) o **`venv\Scripts\activate`** 
+   (Windows): activa el entorno virtual en la terminal actual. A partir de aquí, 
+   cualquier `pip install` o `python` usa la copia aislada, no la global. El 
+   prompt de la terminal suele mostrar `(venv)` cuando está activo.
+3. **`pip install -r requirements.txt`**: instala las librerías del proyecto 
+   (fastapi, uvicorn...) dentro del entorno virtual ya activado.
+4. **`uvicorn main:app --reload`**: arranca el servidor usando la variable `app` 
+   de main.py. A diferencia de la Fase 0, aquí no hace falta `python -m` delante 
+   porque el entorno virtual activado ya deja `uvicorn` accesible directamente.
+
 La API queda disponible en `http://localhost:8000`. FastAPI genera documentación 
 interactiva automática en `http://localhost:8000/docs`, donde se pueden probar 
 los tres endpoints directamente desde el navegador.
