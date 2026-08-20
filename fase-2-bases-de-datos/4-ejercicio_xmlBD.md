@@ -119,3 +119,93 @@ entender su estructura interna.
 ## Fuentes
 Documentación oficial de eXist-db (exist-db.org/exist/apps/doc), Wikibooks 
 XQuery (en.wikibooks.org/wiki/XQuery).
+
+## Preguntas frecuentes: otras bases XML, XQuery vs XPath, y solución mixta
+
+### ¿MarkLogic, BaseX y eXist-db son lo mismo?
+
+No son lo mismo, pero sí son de la misma categoría: las tres son bases de 
+datos XML nativas que implementan XQuery/XPath. Diferencias:
+
+- **eXist-db**: open source, gratuita, accesible para aprender y para 
+  proyectos pequeños/medianos.
+- **BaseX**: open source y gratuita, muy ligera y rápida, popular en 
+  humanidades digitales (procesamiento de textos, TEI).
+- **MarkLogic**: comercial (de pago), pensada para escala empresarial grande 
+  — clustering, alta disponibilidad, búsqueda semántica integrada, seguridad 
+  a nivel de documento. Habitual en clientes corporativos grandes.
+
+Misma relación que existe entre PostgreSQL (open source) y Oracle Database 
+(comercial, empresarial): mismo paradigma, distinto tamaño/precio de producto.
+
+### ¿XQuery y XPath son lo mismo?
+
+No, pero están estrechamente relacionados — XQuery incluye XPath dentro de sí.
+
+- **XPath**: lenguaje para navegar por la estructura de un XML (ej. 
+  `$topic/topic/body/p/text()`) — el "camino" hacia un dato concreto.
+- **XQuery**: lenguaje más completo que incluye XPath para navegar, pero 
+  añade capacidad de construir consultas complejas (FLWOR: for/where/order 
+  by/return), transformar resultados, y generar XML nuevo como salida.
+
+Analogía: XPath es como escribir una ruta de carpetas; XQuery es el programa 
+completo que usa esas rutas para hacer algo con los datos.
+
+### ¿Se puede tener una solución mixta (PostgreSQL + eXist-db a la vez)?
+
+Sí — se llama "polyglot persistence" (persistencia políglota): usar la base 
+de datos adecuada para cada tipo de dato, en vez de forzar todo a un único 
+motor. Es habitual en sistemas reales, no una rareza.
+
+Reparto posible en este CCMS:
+- **PostgreSQL**: autores, estados, revisiones (metadatos: quién, cuándo), 
+  versiones, relación topic↔estado — todo lo relacional ya construido.
+- **eXist-db**: el contenido XML/DITA real de cada topic y ditamap — en vez 
+  de guardarlo como texto plano en `revisiones.contenido`, se guardaría como 
+  documento en eXist-db, y la fila de `revisiones` en PostgreSQL guardaría 
+  solo una referencia (ej. la ruta del documento) en vez del texto completo.
+
+El backend hablaría con ambas bases desde `storage/` — mismo patrón ya usado 
+("una capa de storage habla con la persistencia"), solo que reparte el 
+trabajo entre dos motores según el tipo de dato.
+
+### ¿TEXTML es una base de datos de IXIASoft?
+
+Sí — es la base de datos XML nativa propia de IXIASoft, propietaria (no 
+usable fuera de su ecosistema), que sirve de motor de persistencia bajo su 
+CCMS. Es a IXIASoft lo que eXist-db es en este proyecto: la pieza que guarda 
+y consulta el XML de forma nativa. Diferencia: la de este proyecto es open 
+source y genérica; la de IXIASoft es cerrada y viene empaquetada dentro de su 
+producto comercial.
+
+### ¿Qué implicaría cambiar de PostgreSQL a eXist-db en este proyecto?
+
+**Se mantendría:**
+- Routers y services de FastAPI — la interfaz hacia frontend/Oxygen no 
+  cambia.
+- El diseño conceptual del esquema (objetos_contenido, revisiones, versiones, 
+  autores...) sigue teniendo sentido como modelo mental, aunque cambie cómo 
+  se implementa.
+
+**Cambiaría por completo:**
+- psycopg2/SQLAlchemy desaparecen — se necesitaría una librería cliente de 
+  eXist-db para Python (bibliotecas REST que hablan con su API HTTP).
+- `models.py` (clases SQLAlchemy con columnas) deja de tener sentido tal 
+  cual — las "tablas" pasarían a ser colecciones de documentos XML, y las 
+  relaciones (ej. topic↔versión) se modelarían como atributos/referencias 
+  dentro del propio XML, o se mantendrían en un sistema relacional aparte 
+  (la solución mixta de arriba).
+- Todas las consultas (`db.query(Modelo).filter_by(...)`) se reescribirían 
+  como XQuery.
+- `crear_tablas.py` se sustituiría por la creación de colecciones (carpetas 
+  de documentos) en eXist-db.
+
+**Recomendación para este proyecto:** no sustituir PostgreSQL por eXist-db 
+por completo — se perdería la solidez relacional ya construida (revisiones, 
+versiones, autores, estados), que es donde PostgreSQL es más fuerte. Lo que 
+sí tendría sentido explorar más adelante (ampliación real de arquitectura, no 
+en la Fase 2) es la solución mixta: mantener PostgreSQL para lo relacional 
+tal como está, y añadir eXist-db específicamente para el contenido XML/DITA, 
+sustituyendo solo la columna `revisiones.contenido` por una referencia a un 
+documento en eXist-db. Posible ejercicio de ampliación en la Fase 4 
+(arquitectura).
