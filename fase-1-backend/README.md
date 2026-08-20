@@ -63,4 +63,101 @@ casi siempre es la opción correcta. Desconfiar de quien proponga microservicios
 
 ## Ejercicio
 
-_Pendiente de empezar esta fase._
+API con FastAPI en `api/` para gestionar topics de un CCMS, organizada en capas 
+(rutas / lógica de negocio / almacenamiento), con un endpoint que simula la mejora 
+de legibilidad de un topic mediante un LLM.
+
+### Por qué esta arquitectura
+
+**Separación en tres capas (routers / services / storage).** Cada capa tiene una 
+única responsabilidad y solo conoce a la capa inmediatamente inferior:
+
+- `routers/` traduce HTTP a llamadas de Python y viceversa: recibe la petición, 
+  la valida con Pydantic, llama al servicio, y convierte el resultado (o el error) 
+  en una respuesta HTTP con su código de estado. No decide nada de negocio.
+- `services/` contiene el "qué hacer": crear un topic, listarlos, generar la 
+  sugerencia de mejora. No sabe qué es FastAPI ni qué es un código 404 — por eso, 
+  cuando no encuentra un topic, lanza una excepción de Python normal 
+  (`TopicNoEncontrado`) y es el router quien decide traducirla a un 404.
+- `storage/` es la única capa que sabe *cómo* se guardan los datos. Hoy es un 
+  diccionario en memoria; en la Fase 2, cuando se sustituya por una base de datos 
+  real, en teoría solo debería cambiar este archivo — routers y services no 
+  deberían enterarse de qué motor de almacenamiento hay detrás.
+
+Esta separación es la misma idea ya apuntada en la sección "Arquitectura por capas" 
+más arriba: se paga con algo más de archivos, pero a cambio cada pieza se puede 
+entender, probar y cambiar por separado.
+
+**`schemas.py` (Pydantic) separado del modelo de dominio (`storage.Topic`).** 
+Aunque en este ejercicio ambos tienen los mismos campos, se mantienen como cosas 
+distintas a propósito: `schemas.py` es el contrato público de la API (lo que 
+viaja por HTTP), mientras que `Topic` en `storage/` es la representación interna. 
+Si en el futuro se quisiera ocultar un campo interno o cambiar cómo se guarda 
+sin romper el contrato de la API, esta separación ya está lista para eso.
+
+**Almacenamiento en memoria (diccionario + contador de id).** Es intencionadamente 
+lo más simple posible: nada de ficheros ni base de datos todavía, porque eso es 
+justo lo que se trabajará en la Fase 2. El objetivo aquí es fijar bien la 
+arquitectura por capas antes de introducir la complejidad de la persistencia real. 
+Como contrapartida, los datos se pierden cada vez que se reinicia el servidor — 
+es una limitación conocida y aceptada para este ejercicio.
+
+**`POST /topics/{id}/mejorar` no sobrescribe el topic.** Se simula la respuesta 
+de un LLM (sin llamar a ningún modelo real) y se devuelve como una sugerencia 
+aparte (`contenido_original` + `contenido_mejorado`), sin guardarla automáticamente. 
+Esto imita el flujo real de Oxygen con un LLM: el modelo sugiere, un humano revisa 
+y decide si acepta el cambio — guardar automáticamente lo que sugiere un modelo 
+sin revisión sería una mala práctica editorial. La función que genera la mejora 
+está aislada en `services/topics_service.py` (`_mock_mejora_legibilidad`) 
+precisamente para que, cuando se conecte un LLM real, sea el único punto del 
+código que haya que sustituir.
+
+### Estructura
+
+```
+fase-1-backend/api/
+├── main.py                    # ensambla la app y registra los routers
+├── schemas.py                 # modelos Pydantic: contrato de entrada/salida de la API
+├── requirements.txt
+├── routers/
+│   └── topics.py              # capa HTTP: rutas /topics
+├── services/
+│   └── topics_service.py      # lógica de negocio (crear, listar, mejorar)
+└── storage/
+    └── memory_store.py        # almacenamiento en memoria (dataclass Topic + dict)
+```
+
+### Endpoints
+
+| Método | Ruta                     | Qué hace                                                   |
+|--------|--------------------------|-------------------------------------------------------------|
+| POST   | `/topics`                | Crea un topic (`titulo` + `contenido`)                     |
+| GET    | `/topics`                | Lista todos los topics                                     |
+| POST   | `/topics/{id}/mejorar`   | Simula una mejora de legibilidad del contenido (mock LLM)  |
+
+### Cómo levantar el proyecto en local
+
+Desde la carpeta `fase-1-backend/api/`:
+
+```bash
+python -m venv venv
+source venv/bin/activate      # en Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+La API queda disponible en `http://localhost:8000`. FastAPI genera documentación 
+interactiva automática en `http://localhost:8000/docs`, donde se pueden probar 
+los tres endpoints directamente desde el navegador.
+
+Ejemplos con `curl`:
+
+```bash
+curl -X POST http://localhost:8000/topics \
+  -H "Content-Type: application/json" \
+  -d '{"titulo": "Instalar el driver", "contenido": "  instalar   el driver   desde el panel  "}'
+
+curl http://localhost:8000/topics
+
+curl -X POST http://localhost:8000/topics/1/mejorar
+```
