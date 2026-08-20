@@ -264,3 +264,84 @@ por capas antes de meter persistencia real. En la Fase 2, este MemoryStore se
 sustituirá por un repositorio que hable con PostgreSQL (o una BD XML nativa), 
 sin que routers ni services cambien una sola línea — porque solo dependen de la 
 interfaz (crear, listar), no de cómo se implementa por dentro.
+
+## Probar la API
+
+### Opción 1: Swagger UI (documentación interactiva)
+
+FastAPI genera automáticamente una interfaz interactiva en `/docs` (ej. 
+http://localhost:8000/docs). Permite probar cada endpoint sin escribir código:
+
+1. Despliega el endpoint que quieras probar (ej. POST /topics)
+2. Clic en "Try it out"
+3. Edita el JSON de ejemplo con datos reales
+4. Clic en "Execute"
+5. Debajo aparece la respuesta real: código de estado y el JSON devuelto por el servidor
+
+Es la forma más rápida de verificar que la API funciona antes de conectarle 
+cualquier frontend.
+
+### Opción 2: curl (línea de comandos)
+
+`curl` es un programa de terminal para hacer peticiones HTTP sin navegador ni 
+interfaz gráfica. Útil para pruebas rápidas, scripts de automatización, o cuando 
+se trabaja en un servidor sin entorno gráfico (ej. conectado por SSH).
+
+**Importante: ¿dónde se escribe curl?**
+
+`curl` se ejecuta en la terminal/línea de comandos del sistema operativo (CMD, 
+PowerShell, o la terminal integrada de un editor como VS Code) — la misma ventana 
+donde se ejecutan `pip install`, `python -m venv venv` o `uvicorn main:app --reload`.
+
+No confundir con la pestaña "Console" de las DevTools del navegador (F12): esa 
+consola solo ejecuta código JavaScript sobre la página abierta, no comandos curl 
+ni comandos del sistema.
+
+No hace falta estar dentro del entorno virtual (venv) ni en ninguna carpeta 
+concreta del proyecto para usar curl — es un programa independiente del sistema. 
+Solo hace falta que el servidor (uvicorn) siga corriendo en otra terminal.
+
+```bash
+# GET /topics — listar todos los topics
+curl http://localhost:8000/topics
+```
+
+```bash
+# POST /topics — crear un topic
+curl -X POST http://localhost:8000/topics \
+  -H "Content-Type: application/json" \
+  -d '{"titulo": "Mi primer topic", "contenido": "Texto de prueba"}'
+```
+
+```bash
+# POST /topics/{id}/mejorar — mejorar un topic (sustituir 1 por el id real)
+curl -X POST http://localhost:8000/topics/1/mejorar
+```
+
+Qué significa cada parte:
+- `-X POST`: indica el verbo HTTP (por defecto curl usa GET)
+- `-H "Content-Type: application/json"`: cabecera HTTP que indica que el cuerpo 
+  enviado es JSON
+- `-d '...'`: el cuerpo (body) de la petición, con los datos en JSON
+
+Es el mismo mecanismo que usa Swagger UI por detrás al pulsar "Execute", o que 
+usa `fetch()` en JavaScript — aquí se escribe manualmente desde la terminal.
+
+### Nota sobre frontend: /docs también es un frontend
+
+Técnicamente, /docs (Swagger UI) es un frontend: el navegador recibe HTML, CSS y 
+JavaScript, y ese JavaScript hace fetch() a los endpoints igual que cualquier 
+otro cliente. Cumple los tres elementos de la Fase 0 (cliente, servidor, HTTP 
+entre medias).
+
+La distinción real no es "frontend vs no-frontend", sino quién lo construyó y 
+para quién:
+- **/docs**: generado automáticamente por FastAPI a partir de los schemas y 
+  rutas, sin escribir una línea de código para ello. Es un **frontend de 
+  desarrollador**, pensado para probar/explorar la API rápidamente — no para el 
+  usuario final del CCMS.
+- **Frontend de producto** (Fase 3, React): construido a medida, pensado para la 
+  experiencia del usuario final (autor, revisor) — formularios y dashboard sin 
+  que el usuario necesite saber qué es un endpoint o un JSON.
+
+Ambos son "frontend" en sentido estricto, pero cumplen roles distintos.
