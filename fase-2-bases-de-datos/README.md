@@ -56,6 +56,19 @@ Organiza el contenido en tres niveles jerárquicos:
   una versión concreta, y el mismo objeto de contenido puede reutilizarse en más 
   de una versión a la vez.
 
+**Aclaración: DRM es un producto de software, no solo un método**
+
+DRM es un módulo de software concreto de IXIASoft — opcional y vendido/activado 
+aparte, no un concepto genérico que todo CCMS implemente igual. Sin el módulo 
+DRM activado, IXIASoft CCMS ya tiene branching "out-of-the-box" para versionar 
+documentación; DRM es una capa adicional más sofisticada sobre esa base.
+
+Distinción importante:
+- **DRM** = producto de software concreto de IXIASoft (módulo opcional, de pago)
+- **Branching a nivel de topic / reutilización entre versiones** = el concepto 
+  de arquitectura de fondo, trasladable a un diseño propio sin depender de ese 
+  producto específico
+
 ### El mecanismo clave: Branching a nivel de topic, no de manual completo
 Permite crear una nueva versión de la documentación basada en la versión actual 
 (ej. Versión 1 → Versión 2) sin afectar a la original. La parte importante: no 
@@ -85,6 +98,49 @@ completo de un documento en un momento concreto.
 
 **Fuentes:** documentación oficial de IXIASOFT/MadCap Software sobre el módulo 
 Dynamic Release Management (ixiasoft.com, madcapsoftware.com).
+
+## Comparativa: cómo lo resuelven Heretto y Bluestream (XDocs)
+
+### Patrón común a los tres proveedores (IXIASoft, Heretto, Bluestream)
+Los tres usan el mismo concepto de fondo: branching + merge a nivel de 
+componente individual (topic), no de documento completo. Las diferencias están 
+en la experiencia de usuario y las herramientas de soporte, no en el concepto 
+de arquitectura.
+
+### Heretto: historial por recurso + colaboración en tiempo real
+- Historial de revisiones por recurso individual (topics, mapas, media), 
+  accesible en una pestaña "History", con opción de revertir a versiones 
+  anteriores.
+- Detalle de diseño revelador: restaurar un mapa a una versión anterior NO 
+  restaura automáticamente los topics que contiene a sus versiones anteriores — 
+  refleja que un topic es una entidad independiente con su propio ciclo de vida, 
+  no "parte" del documento que lo contiene.
+- Diferenciador principal: colaboración en tiempo real tipo Google Docs — todo 
+  el equipo en el mismo archivo simultáneamente, sin bloqueo de ficheros, sin 
+  check-in/check-out. Es un modelo de concurrencia distinto al bloqueo 
+  tradicional de ficheros ("file locking") que usan sistemas más clásicos.
+
+### Bluestream XDocs: el mecanismo de merge más explícito
+- Permite trabajar de forma independiente en versiones de topics en ramas 
+  distintas; al fusionar, el sistema muestra los cambios y posibles conflictos, 
+  y el usuario decide qué cambios fusionar — el mismo lenguaje que un merge de 
+  Git con conflictos, pero aplicado a componentes XML individuales.
+- Integra DITA Merge de DeltaXML, una herramienta especializada en comparar y 
+  fusionar XML de forma semántica (entendiendo la estructura, no solo 
+  comparando texto línea a línea como un diff genérico).
+- Dato de posicionamiento: el propio Bluestream reconoce en un whitepaper que 
+  las necesidades de versionado de contenido DITA pueden resolverse con Git 
+  (open source) o con un CCMS comercial, dependiendo de la complejidad real del 
+  caso — confirmación, desde el propio vendedor, de que la complejidad debe 
+  justificar la herramienta.
+
+### Conclusión aplicable al diseño del esquema en PostgreSQL
+Los tres convergen en: branch + merge a nivel de topic individual, con 
+historial de revisiones por componente. Para el esquema propio, esto sugiere 
+como mínimo: una relación many-to-many entre topics y versiones/ramas (un topic 
+puede pertenecer a varias líneas de versión a la vez), más una tabla de 
+historial/revisiones por topic — el mismo patrón confirmado como estándar de 
+facto del sector.
 
 ## Ejercicio
 
