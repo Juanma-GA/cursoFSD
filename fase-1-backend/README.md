@@ -287,6 +287,20 @@ cualquier frontend.
 interfaz gráfica. Útil para pruebas rápidas, scripts de automatización, o cuando 
 se trabaja en un servidor sin entorno gráfico (ej. conectado por SSH).
 
+**Importante: ¿dónde se escribe curl?**
+
+`curl` se ejecuta en la terminal/línea de comandos del sistema operativo (CMD, 
+PowerShell, o la terminal integrada de un editor como VS Code) — la misma ventana 
+donde se ejecutan `pip install`, `python -m venv venv` o `uvicorn main:app --reload`.
+
+No confundir con la pestaña "Console" de las DevTools del navegador (F12): esa 
+consola solo ejecuta código JavaScript sobre la página abierta, no comandos curl 
+ni comandos del sistema.
+
+No hace falta estar dentro del entorno virtual (venv) ni en ninguna carpeta 
+concreta del proyecto para usar curl — es un programa independiente del sistema. 
+Solo hace falta que el servidor (uvicorn) siga corriendo en otra terminal.
+
 ```bash
 # GET /topics — listar todos los topics
 curl http://localhost:8000/topics
