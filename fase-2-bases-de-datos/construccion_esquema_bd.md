@@ -4,128 +4,187 @@ Diseño paso a paso del esquema relacional para el CCMS, basado en la
 investigación de cómo lo resuelven IXIASoft, Heretto y Bluestream (ver 
 README.md de esta fase).
 
-## Entidades identificadas
+## Renombrado de conceptos (aclaración importante)
 
-1. **Autores**: quién escribe/edita contenido
-2. **Topics**: el contenido en sí
-3. **Versiones**: contenedor lógico de una línea de producto/release
-4. **Estados** (tabla de catálogo): valores predefinidos del workflow 
-   (borrador, en revisión, publicado...) — evita texto libre repetido, permite 
-   añadir/modificar estados en un solo sitio, y colgar metadatos como orden 
-   del flujo
-5. **Topic↔Versión** (tabla relacional many-to-many): un topic puede vivir en 
-   varias versiones a la vez sin duplicarse
-6. **Revisiones**: historial append-only (solo INSERT, nunca UPDATE/DELETE) de 
-   cada cambio de contenido de un topic — independiente de en qué versión esté 
-   viviendo ese topic
-7. **Baselines**: fotografía congelada e inmutable de una versión en un 
-   momento concreto (ej. "estado exacto de la Versión 2 el día de entrega al 
-   cliente") — equivalente al concepto de "Snapshot" visto en la investigación 
-   de IXIASoft/Bluestream
-8. **Baseline↔Revisión**: qué revisión concreta de cada topic forma parte de 
-   una baseline (Opción A de diseño: se referencia la revisión exacta, no se 
-   duplica contenido — más ligero, y seguro porque las revisiones son 
-   inmutables)
+Durante el diseño se detectó una ambigüedad: la palabra "versión" se estaba 
+usando para dos conceptos distintos que en realidad viven en niveles 
+diferentes. Se renombra así:
 
-## El punto clave: cómo se conectan versión y revisión
+- **Release**: el contenedor de release de producto (ej. "Versión 1 del manual", 
+  con su propio branching) — antes llamado "Versión" en las primeras notas de 
+  este documento.
+- **Versión**: ahora significa un checkpoint deliberado de un objeto de 
+  contenido individual (topic o mapa) — equivalente a un "tag" en Git: marca 
+  una revisión concreta como significativa, sin crear nada nuevo 
+  estructuralmente.
+- **Revisión**: sin cambios — cada guardado genera una revisión (historial 
+  append-only, solo INSERT, nunca UPDATE/DELETE).
 
-Son dos ejes distintos que se cruzan en la tabla Topic↔Versión:
-- **Revisión** = historial de cambios de contenido de UN topic, propio de ese 
-  topic, independiente de las versiones (como un "Ctrl+Z" lineal).
-- **Versión** = a qué línea de producto pertenece un topic ahora mismo, con 
-  qué estado.
+## Por qué existen tres niveles: Revisión, Versión, Release
 
-La tabla Topic↔Versión no apunta solo al topic en abstracto: apunta a la 
-**revisión concreta** que corresponde a esa combinación exacta de topic+versión. 
-Por eso incluye `revision_id`, además de `topic_id`, `version_id` y `estado_id`.
+Ejemplo real de flujo de trabajo en un editor tipo Oxygen:
+1. Un autor edita un topic y guarda varias veces mientras trabaja → cada 
+   guardado genera una **Revisión** nueva (guardado fino, continuo).
+2. En un momento dado, decide que ese estado es un punto significativo → se 
+   marca esa revisión como una **Versión** (checkpoint deliberado, tipo tag).
+3. Esa versión del topic vive dentro de una **Release** de producto (ej. 
+   "Manual V2"), donde además tiene un estado de workflow (borrador, en 
+   revisión, publicado).
 
-### Ejemplo paso a paso
+### Nota importante: por qué las revisiones importan incluso sin cambiar de Release
 
-1. Se crea el Topic X → se crea la Revisión #1 (contenido inicial) → fila en 
-   Topic↔Versión: (Topic X, Versión 1, Revisión #1, estado=publicado)
-2. Se necesita cambiar el Topic X solo para la Versión 2, sin tocar la V1 → 
-   se crea la Revisión #2 (contenido modificado) → se añade una fila NUEVA en 
-   Topic↔Versión: (Topic X, Versión 2, Revisión #2, estado=borrador)
-3. Ambas filas coexisten sin pisarse: la V1 sigue mostrando el contenido 
-   original (Revisión #1); la V2 muestra el contenido cambiado (Revisión #2).
+Las revisiones no existen solo para saltar entre releases de producto — 
+permiten que el trabajo de un autor quede guardado (guardados intermedios 
+mientras escribe, o el resultado de aplicar una mejora sugerida por el LLM) 
+sin necesidad de generar una nueva Release. El historial detallado de cambios 
+puede crecer dentro de la misma Release; solo cuando se marca un checkpoint 
+(Versión) y se decide moverlo a otra Release, se actualiza la fila 
+correspondiente en Objeto↔Release.
 
-Resumen: la versión dice DÓNDE vive el topic ahora; la revisión dice QUÉ 
-contenido exacto tiene ahí. La tabla Topic↔Versión conecta ambos ejes.
+## Generalización: topics y ditamaps comparten el mismo mecanismo
 
-### Nota importante: por qué las revisiones importan incluso sin cambiar de versión
+Un ditamap (`.ditamap`) es, igual que un topic, un archivo XML que se edita, 
+se guarda (revisiones) y tiene checkpoints deliberados (versiones) — el mismo 
+patrón que ya se investigó en Heretto, donde mapas y topics se tratan como 
+"recursos" con el mismo mecanismo de historial y versionado.
 
-Las revisiones no existen solo para saltar entre versiones — son importantes 
-porque permiten que el trabajo de un autor quede guardado (por ejemplo, 
-guardados intermedios mientras escribe, o el resultado de aplicar una mejora 
-sugerida por el LLM) sin necesidad de generar una nueva versión del producto. 
-Se puede tener un historial detallado de cambios dentro de la misma versión, 
-y solo la fila de Topic↔Versión se actualiza para apuntar a la revisión más 
-reciente — no hace falta "subir de versión" para cada guardado.
+Diferencia real: un ditamap no es solo contenido de texto — su función es 
+referenciar y ordenar otros topics (y otros mapas, de forma anidada). Esa 
+estructura no la tiene un topic normal.
+
+### Decisión de diseño: entidad genérica compartida (Opción A)
+
+En vez de duplicar todo el sistema de revisiones/versiones/releases/baselines 
+para topics y para mapas por separado, se crea una entidad genérica 
+`objetos_contenido` (con un campo `tipo`: topic o ditamap), y todo el 
+mecanismo ya diseñado apunta a esta tabla genérica. Para los ditamaps 
+específicamente, se añade la tabla `mapa_topic_refs`.
+
+Ventaja: todo el sistema de revisiones/versiones/baselines se escribe una sola 
+vez y sirve para topics, mapas, y cualquier futuro tipo de objeto DITA (ej. 
+imágenes). Alineado con cómo lo hacen los CCMS reales.
+
+### La tabla mapa_topic_refs
+
+Responde a la pregunta: "en esta revisión concreta del mapa, ¿qué topics 
+contiene, en qué orden, y con qué versión/checkpoint de cada uno?"
+
+Cada fila conecta: una revisión de mapa concreta (`mapa_revision_id`), un 
+topic referenciado (`topic_id`), la versión/checkpoint concreto de ese topic 
+que usa esa referencia (`topic_version_id`), el orden dentro del mapa (importa 
+para la publicación final), y opcionalmente una `keyref` (la referencia 
+indirecta tipo DITA key/keyref vista en la investigación de IXIASoft).
+
+Ejemplo: la Revisión #5 del mapa "Manual de instalación" referencia: Topic A 
+(su Versión #2), Topic B (su Versión #1), Topic C (su Versión #4), en ese 
+orden. Si mañana se actualiza el Topic B a un nuevo checkpoint pero no se 
+toca el mapa, la Revisión #5 del mapa sigue apuntando exactamente a las 
+mismas versiones que apuntaba antes — nada cambia por accidente. Solo editar 
+el mapa deliberadamente crea una Revisión #6 con las referencias actualizadas. 
+Esto reproduce el comportamiento documentado en Heretto: restaurar un mapa a 
+una versión anterior no restaura automáticamente los topics que contiene.
+
+## Baselines: ligadas a Release y a Versión (no a Revisión)
+
+Una baseline es una fotografía congelada e inmutable de una Release en un 
+momento concreto (equivalente al "Snapshot" visto en la investigación de 
+IXIASoft/Bluestream). Se relaciona con una Release, y para cada objeto de 
+contenido dentro de esa Release, referencia la Versión (checkpoint) que 
+estaba activa — no la revisión directamente, porque una baseline debe 
+congelar checkpoints deliberados, no guardados intermedios sueltos.
 
 ## Diagrama entidad-relación
 
 ```mermaid
 erDiagram
+    OBJETOS_CONTENIDO ||--o{ REVISIONES : "tiene historial"
     AUTORES ||--o{ REVISIONES : "crea"
-    TOPICS ||--o{ REVISIONES : "tiene historial"
-    TOPICS ||--o{ TOPIC_VERSION : "vive en"
-    VERSIONES ||--o{ TOPIC_VERSION : "contiene"
-    ESTADOS ||--o{ TOPIC_VERSION : "define estado de"
-    REVISIONES ||--o{ TOPIC_VERSION : "contenido exacto de"
-    VERSIONES ||--o{ BASELINES : "se congela en"
-    BASELINES ||--o{ BASELINE_REVISION : "incluye"
-    REVISIONES ||--o{ BASELINE_REVISION : "referenciada por"
+    OBJETOS_CONTENIDO ||--o{ VERSIONES : "tiene checkpoints"
+    REVISIONES ||--o{ VERSIONES : "checkpoint de"
+    OBJETOS_CONTENIDO ||--o{ OBJETO_RELEASE : "vive en"
+    RELEASES ||--o{ OBJETO_RELEASE : "contiene"
+    VERSIONES ||--o{ OBJETO_RELEASE : "checkpoint activo en"
+    ESTADOS ||--o{ OBJETO_RELEASE : "define estado de"
+    RELEASES ||--o{ BASELINES : "se sella en"
+    BASELINES ||--o{ BASELINE_VERSION : "incluye"
+    OBJETOS_CONTENIDO ||--o{ BASELINE_VERSION : "referenciado por"
+    VERSIONES ||--o{ BASELINE_VERSION : "checkpoint congelado en"
+    REVISIONES ||--o{ MAPA_TOPIC_REFS : "estructura definida en"
+    OBJETOS_CONTENIDO ||--o{ MAPA_TOPIC_REFS : "referenciado desde mapa"
+    VERSIONES ||--o{ MAPA_TOPIC_REFS : "versión referenciada"
+    PRODUCTOS ||--o{ RELEASES : "agrupa"
 
+    PRODUCTOS {
+        int id PK
+        string nombre
+    }
+    OBJETOS_CONTENIDO {
+        int id PK
+        string tipo "topic o ditamap"
+        string titulo_actual
+    }
     AUTORES {
         int id PK
         string nombre
         string email
     }
-    TOPICS {
-        int id PK
-        string titulo_actual
-    }
     REVISIONES {
         int id PK
-        int topic_id FK
+        int objeto_id FK
         int autor_id FK
-        text contenido
+        text contenido "null si es ditamap, estructura vive en mapa_topic_refs"
         datetime fecha
     }
     VERSIONES {
         int id PK
-        string nombre
-        int producto_id FK
+        int objeto_id FK
+        int revision_id FK
+        string etiqueta "checkpoint deliberado, tipo tag"
+        datetime fecha
     }
     ESTADOS {
         int id PK
         string nombre
         int orden
     }
-    TOPIC_VERSION {
+    RELEASES {
         int id PK
-        int topic_id FK
+        string nombre
+        int producto_id FK
+    }
+    OBJETO_RELEASE {
+        int id PK
+        int objeto_id FK
+        int release_id FK
         int version_id FK
-        int revision_id FK
         int estado_id FK
     }
     BASELINES {
         int id PK
-        int version_id FK
+        int release_id FK
         string nombre
         datetime fecha_sellado
     }
-    BASELINE_REVISION {
+    BASELINE_VERSION {
         int id PK
         int baseline_id FK
-        int revision_id FK
+        int objeto_id FK
+        int version_id FK
+    }
+    MAPA_TOPIC_REFS {
+        int id PK
+        int mapa_revision_id FK
+        int topic_id FK
+        int topic_version_id FK
+        int orden
+        string keyref "opcional, referencia indirecta tipo DITA key"
     }
 ```
 
 ## Pendiente de decidir
-- ¿Una baseline cuelga de una única versión concreta, o puede mezclar topics 
-  de distintas versiones?
 - Definición completa de tipos de datos y restricciones (NOT NULL, UNIQUE, 
-  etc.) de cada columna
-- Tabla `productos` (mencionada como producto_id en Versiones pero aún no 
-  diseñada)
+  CHECK) de cada columna
+- Tabla `productos`: solo esbozada (id, nombre) — definir si necesita más 
+  metadatos
+- Cómo se relaciona el usuario/rol (autor, revisor, publisher) con permisos 
+  sobre estados concretos en `objeto_release`
