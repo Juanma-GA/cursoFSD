@@ -182,3 +182,58 @@ parte de la lógica del dashboard. Documentados aquí para referencia:
   Oxlint es una alternativa moderna y rápida a ESLint. No imprescindible para 
   que el dashboard funcione, pero ayuda a detectar errores mientras se 
   escribe código.
+
+## Diagrama de arquitectura del dashboard
+
+```mermaid
+flowchart TB
+    subgraph Backend["Backend (fase-3-frontend/api)"]
+        API[FastAPI :8000]
+        DB[(PostgreSQL Docker)]
+        API --> DB
+    end
+
+    subgraph Frontend["Dashboard React (:5173)"]
+        App["App.jsx<br/>(estado: topics)"]
+        List["TopicList.jsx<br/>(sin estado propio)"]
+        Card["TopicCard.jsx<br/>(estado propio: sugerencia mejora)"]
+        Form["TopicForm.jsx<br/>(estado propio: titulo, contenido)"]
+
+        App -->|"props: topics"| List
+        List -->|"props: topic (uno)"| Card
+        Form -.->|"onTopicCreado(topic ya creado)"| App
+    end
+
+    App -->|"GET /topics"| API
+    Form -.->|"POST /topics<br/>(fetch propio, vía api.js)"| API
+    Card -.->|"POST /topics/{id}/mejorar<br/>(fetch propio, vía api.js)"| API
+    API -.->|"JSON respuesta"| App
+    API -.->|"JSON respuesta"| Form
+    API -.->|"JSON respuesta"| Card
+
+    style Backend fill:#1e293b,color:#fff
+    style Frontend fill:#1e3a2e,color:#fff
+```
+
+Cómo leerlo: las flechas sólidas representan datos bajando por props (padre → 
+hijo). Las flechas punteadas representan peticiones a la API o eventos que 
+suben (hijo → padre).
+
+**Matiz importante frente al patrón "App centraliza todo el fetch"**: solo 
+`GET /topics` lo hace App.jsx. `TopicForm` y `TopicCard` hacen su **propio** 
+`fetch()` a la API (vía `api.js`), no le piden a App que lo haga por ellos:
+
+- `TopicForm` llama a `crearTopic()` directamente, y solo cuando el `POST` ya 
+  ha terminado con éxito, avisa a App vía `onTopicCreado(nuevoTopic)` — le 
+  pasa el topic ya creado, no le pide crearlo.
+- `TopicCard` llama a `mejorarTopic()` directamente y guarda el resultado en 
+  su propio estado (`sugerencia`). **No tiene ninguna prop de tipo callback 
+  hacia App** — no existe un `onMejorar`, porque ninguna otra parte de la 
+  interfaz necesita saber si esa tarjeta concreta está mostrando una 
+  sugerencia.
+
+En React esto es igual de válido que centralizarlo todo en el ancestro común: 
+el criterio para decidir quién hace el fetch es si el resultado necesita 
+compartirse con otros componentes (como `topics`, que sí sube a App) o si es 
+puramente local a un componente (como la `sugerencia` de una tarjeta, que no 
+sube a ningún sitio).
