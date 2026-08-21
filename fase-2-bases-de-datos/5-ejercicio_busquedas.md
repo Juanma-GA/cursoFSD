@@ -145,3 +145,52 @@ escalar) es distinto al del resto del sistema.
 Comparativas Elasticsearch vs OpenSearch 2026 (daily.dev, SigNoz, 
 tech-insider.org, Oktopeak), documentación de licenciamiento de Elastic y 
 OpenSearch Software Foundation (Linux Foundation).
+
+## ¿Podría Elasticsearch sustituir a eXist-db?
+
+No, aunque a primera vista lo parezca — ambos "buscan dentro de contenido", 
+pero resuelven problemas de naturaleza distinta.
+
+### Lo que eXist-db hace que Elasticsearch no hace
+
+1. **eXist-db es fuente de verdad del documento completo.** Guarda el 
+   XML/DITA real, con toda su estructura, y permite modificarlo (ver Ejemplo 
+   4 de 4-ejercicio_xmlBD.md: `update value $doc/title with '...'`) sin 
+   perder el resto del documento. Elasticsearch guarda copias derivadas y 
+   simplificadas — el Ejemplo 1 de este documento solo indexa campos planos 
+   (titulo, contenido, estado, version, autor), no el árbol XML completo con 
+   su jerarquía de etiquetas. Meter el XML completo en Elasticsearch como 
+   texto plano reproduciría el mismo problema que ya existe con PostgreSQL: 
+   perder la capacidad de navegar/editar la estructura interna.
+
+2. **eXist-db entiende la estructura DITA de forma nativa** (topic → body → 
+   p, referencias entre mapas y topics vía keys/keyrefs). Elasticsearch no 
+   sabe qué es un `<topic>` o un `<keyref>` — solo indexa lo que se extraiga 
+   explícitamente como campos planos.
+
+3. **Elasticsearch no es transaccional ni pensado para ser fuente de 
+   verdad.** Es práctica estándar del sector que un índice de búsqueda se 
+   pueda borrar y reconstruir por completo desde la base de datos real, sin 
+   pérdida de información — nunca guarda nada que no exista ya en otro sitio. 
+   Si fuera la única copia del contenido, perderlo significaría perder el 
+   CCMS entero.
+
+### Cómo pensarlo correctamente
+
+Elasticsearch no compite con eXist-db — compite (parcialmente) con la 
+capacidad de búsqueda de PostgreSQL. Es una capa añadida sobre la fuente de 
+verdad (PostgreSQL, eXist-db, o ambos), nunca un reemplazo de ella. Con la 
+solución mixta (PostgreSQL + eXist-db), seguiría haciendo falta Elasticsearch 
+encima de ambas, porque ninguna está optimizada para relevancia/ranking a 
+gran escala — es la tercera pieza del "polyglot persistence", no una 
+alternativa a la segunda.
+
+### Matiz: cuándo Elasticsearch sí reduce la necesidad de eXist-db
+
+Si el caso de uso real es solo "que un autor encuentre topics relevantes por 
+palabras clave" (sin necesitar editar la estructura XML de forma granular, 
+sin necesitar XQuery para transformaciones complejas), es posible que 
+PostgreSQL + Elasticsearch baste, sin añadir eXist-db en absoluto. Pero eso 
+no es "Elasticsearch sustituyendo a eXist-db" — es que, para ese caso 
+concreto, nunca hizo falta eXist-db, porque la necesidad real era de 
+búsqueda, no de manipulación estructural de XML.
