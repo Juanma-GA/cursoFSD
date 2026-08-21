@@ -151,3 +151,34 @@ npm run dev
 El dashboard queda en `http://localhost:5173`. Con la API corriendo en el 
 `8000`, la página carga los topics existentes, permite crear uno nuevo, y 
 generar la sugerencia mock de mejora sobre cualquiera de ellos.
+
+## Archivos generados automáticamente por Vite
+
+Al crear el proyecto con Vite (`npm create vite@latest`), se generan 
+automáticamente varios archivos de infraestructura, no escritos a mano como 
+parte de la lógica del dashboard. Documentados aquí para referencia:
+
+- **main.jsx**: punto de entrada real de la aplicación. Engancha el 
+  componente App.jsx al HTML real (index.html) con 
+  `ReactDOM.createRoot(...).render(<App />)`. Estándar, casi nunca se toca.
+- **index.html**: único archivo HTML real de todo el dashboard (es una SPA). 
+  Contiene un `<div id="root"></div>` prácticamente vacío donde main.jsx 
+  inyecta toda la aplicación React — todo lo visible se genera dinámicamente 
+  por JavaScript dentro de ese div.
+- **vite.config.js**: configuración de Vite, la herramienta que compila y 
+  sirve el código React en desarrollo (lo que arranca con `npm run dev` y da 
+  la URL localhost:5173). Equivalente, en el mundo frontend, a lo que uvicorn 
+  es para el backend.
+- **package.json**: equivalente exacto de requirements.txt en Python, pero 
+  para JavaScript/Node.js — lista las dependencias del proyecto (React, y 
+  cualquier librería usada) y sus versiones. Define también comandos como 
+  `npm run dev`.
+- **package-lock.json**: registra las versiones exactas de cada dependencia 
+  y sus propias sub-dependencias, para garantizar instalaciones idénticas en 
+  cualquier máquina. No se edita a mano — se genera y actualiza solo al 
+  instalar/actualizar paquetes.
+- **.oxlintrc.json**: configuración de un linter (herramienta que revisa el 
+  código en busca de errores comunes o estilo inconsistente, sin ejecutarlo). 
+  Oxlint es una alternativa moderna y rápida a ESLint. No imprescindible para 
+  que el dashboard funcione, pero ayuda a detectar errores mientras se 
+  escribe código.
