@@ -237,3 +237,42 @@ el criterio para decidir quién hace el fetch es si el resultado necesita
 compartirse con otros componentes (como `topics`, que sí sube a App) o si es 
 puramente local a un componente (como la `sugerencia` de una tarjeta, que no 
 sube a ningún sitio).
+
+## Aclaración: qué es cada pieza (React, Vite, y quién habla con el backend)
+
+Es fácil confundir estas tres piezas al principio, así que conviene 
+precisarlas:
+
+- **React** no es un "ecosistema de librerías" — es, en sí mismo, una 
+  librería (la pieza central para construir componentes y gestionar estado 
+  con useState, etc.). Sí tiene un ecosistema enorme alrededor (librerías 
+  adicionales que se combinan según necesidad), pero React en sí es una sola 
+  librería con un propósito concreto: construir interfaces con componentes.
+- **Vite** no es un "servidor para comunicarse con el backend" — es una 
+  herramienta de desarrollo y compilación (build tool): sirve el código React 
+  al navegador durante el desarrollo (de ahí la URL localhost:5173), 
+  recompila y recarga automáticamente al guardar cambios (hot reload), y 
+  empaqueta el código para producción con `npm run build`. Vite nunca habla 
+  con FastAPI ni con el backend — es, del lado frontend, el mismo papel que 
+  Uvicorn cumple del lado backend: hace posible ver el código corriendo, 
+  nada más.
+- **Quien sí habla con FastAPI** es el propio código JavaScript, dentro del 
+  navegador — las llamadas fetch() organizadas en api.js. Cuando App.jsx hace 
+  fetch("http://localhost:8000/topics"), eso corre DENTRO del navegador, no 
+  dentro de Vite — Vite ya cumplió su función (servir el código) mucho antes 
+  de que esa llamada ocurra.
+
+### Mapa completo, cada pieza en su sitio
+
+| Pieza | Qué es | Con quién habla |
+|---|---|---|
+| **React** | Librería para construir componentes e interfaces | No habla con nada por sí sola — es solo lógica de UI |
+| **Vite** | Herramienta de desarrollo/compilación (como Uvicorn, pero para frontend) | Sirve el código al navegador; no habla con el backend |
+| **Código JS propio (fetch() en api.js)** | El puente real hacia el backend | Habla con FastAPI vía HTTP, desde dentro del navegador |
+| **FastAPI** | El backend | Recibe esas peticiones HTTP, habla con PostgreSQL |
+
+### La cadena completa
+
+Vite sirve el código React al navegador → el navegador ejecuta ese código → 
+el propio JavaScript (no Vite) hace fetch() hacia FastAPI → FastAPI responde 
+→ React actualiza la pantalla con esos datos.
