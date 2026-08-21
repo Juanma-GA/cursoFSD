@@ -157,6 +157,94 @@ autenticación centralizada.
 4. El backend verifica el JWT en routers, y aplica el RBAC en services: 
    "¿un autor puede hacer esto? Sí/No".
 
+### Cómo funciona SSO con Active Directory, paso a paso
+
+**El problema que resuelve**: sin SSO, cada aplicación (CCMS, correo, 
+intranet) tendría su propia base de usuarios y contraseñas — un empleado 
+recordaría N contraseñas, e IT daría de alta/baja en N sistemas por 
+separado. SSO centraliza esto en un único punto de verdad.
+
+**Los actores, con nombres reales del sector:**
+- **Identity Provider (IdP)**: sistema que verifica identidad — Active 
+  Directory (on-premise) o Azure AD/Microsoft Entra ID (nube). Fuente de 
+  verdad de quién trabaja en la empresa y con qué permisos generales.
+- **Service Provider (SP)**: la aplicación que quiere que el usuario inicie 
+  sesión — en este proyecto, el backend del CCMS.
+- **Protocolo que conecta ambos**: SAML (más veterano, típico con Active 
+  Directory clásico/ADFS) u OAuth2/OIDC (más moderno, típico con Azure 
+  AD/Entra ID en la nube).
+
+**El flujo real, con SAML como ejemplo:**
+1. El autor abre el dashboard y pulsa "Iniciar sesión".
+2. El backend redirige el navegador hacia el Identity Provider (no pide 
+   usuario/contraseña directamente).
+3. Si el usuario ya tiene sesión de Windows activa, el IdP no vuelve a pedir 
+   nada — reconoce que ya está autenticado.
+4. El IdP construye una "aserción SAML": XML firmado digitalmente que 
+   certifica la identidad del usuario, sus grupos de Active Directory, y la 
+   validez temporal.
+5. El navegador vuelve al CCMS llevando esa aserción.
+6. El backend verifica la firma digital (con un certificado público 
+   intercambiado de antemano con el IdP), confirmando que viene realmente 
+   del Active Directory real, no de una falsificación.
+7. Con la identidad confirmada, el backend genera su propio JWT, mapeando 
+   grupos de Active Directory a roles internos (ej. grupo AD 
+   "CCMS-Autores" → rol interno "autor").
+8. A partir de aquí, flujo normal: JWT en cada petición, RBAC en services/.
+
+**Punto clave**: el backend nunca ve ni gestiona la contraseña real del 
+usuario — solo confía en la aserción firmada del IdP. Esto hace SSO más 
+seguro que si cada aplicación gestionara sus propias contraseñas.
+
+**Diferencia con OAuth2/OIDC**: flujo conceptualmente similar, pero el IdP 
+entrega directamente un token JWT ya construido ("ID token"), sin necesidad 
+de construirlo a partir de una aserción SAML — más simple de implementar en 
+un stack moderno como FastAPI.
+
+#### La URL de redirección: qué es y de dónde sale
+
+Es una URL real, pero con información codificada dentro, no un enlace fijo. 
+Requiere una configuración previa (una sola vez):
+
+1. **Registro previo de la aplicación en el IdP** (lo gestiona IT), que 
+   entrega:
+   - Un **Entity ID** (SAML) o **Client ID** (OAuth2): identificador único 
+     de la aplicación CCMS ante el IdP.
+   - La **URL base del IdP** (ej. `https://sts.atexis.com/adfs/ls/` para 
+     ADFS/SAML, o `https://login.microsoftonline.com/{tenant-id}/` para 
+     Azure AD/OIDC).
+   - Un certificado o secreto compartido, para verificar después que las 
+     respuestas vienen realmente de ese IdP.
+
+2. **En el momento del login, el backend construye la URL dinámicamente.** 
+   Ejemplo simplificado con SAML:
+
+```
+https://sts.atexis.com/adfs/ls/?SAMLRequest=<XML_codificado>&RelayState=https://ccms.atexis.com/dashboard
+```
+
+   - `SAMLRequest`: XML codificado en base64 pidiendo autenticar a alguien 
+     para esta aplicación.
+   - `RelayState`: URL de vuelta tras completar el login.
+
+   Ejemplo simplificado con OAuth2/OIDC:
+
+```
+https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/authorize?client_id=TU_CLIENT_ID&redirect_uri=https://ccms.atexis.com/callback&response_type=code&scope=openid
+```
+
+3. **Esta URL no se construye a mano con concatenación de texto** — se usa 
+   una librería (`python3-saml` para SAML, `Authlib` para OIDC) que genera 
+   correctamente el `SAMLRequest` o los parámetros OAuth2 siguiendo el 
+   estándar exacto, sin necesidad de conocer cada detalle criptográfico.
+
+**Secuencia práctica necesaria, en orden:**
+1. Pedir a IT: URL base del IdP, Entity ID/Client ID asignado, certificado 
+   o secreto de confianza.
+2. Instalar la librería correspondiente (SAML u OIDC) en el backend FastAPI.
+3. La librería, con esos datos de configuración, construye automáticamente 
+   la URL de redirección correcta en el momento del login.
+
 ## Ejercicio
 
 _Pendiente de empezar esta fase._
