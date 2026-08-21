@@ -105,6 +105,66 @@ storage, models y el resto quedan exactamente igual que en fase-2.
   al backend. Presentación: el layout (`<header>`, dos columnas) no decide 
   nada, solo organiza dónde va cada hijo.
 
+## Aclaración: dónde vive exactamente el fetch()
+
+App.jsx no escribe fetch() directamente — llama a funciones importadas desde 
+api.js (ej. `obtenerTopics()`), que son las que contienen el fetch() real. Es 
+una capa de organización adicional: en vez de escribir 
+`fetch("http://localhost:8000/topics")` dentro de cada componente, se 
+centraliza en un archivo aparte (api.js), y los componentes solo llaman a 
+funciones con nombre claro (obtenerTopics, crearTopic, mejorarTopic).
+
+Es el mismo patrón de separación de capas ya visto en el backend: api.js es, 
+en el frontend, el equivalente de storage/ en el backend — la única pieza que 
+sabe hablar con el exterior (aquí, con la API HTTP vía fetch), mientras que 
+App.jsx (como routers/services) solo usa funciones con nombre, sin 
+preocuparse del detalle de cómo se hace la petición por debajo.
+
+Contenido real de `api.js`:
+
+```javascript
+// Capa de acceso a la API: el único archivo que sabe la URL del backend y
+// usa fetch() directamente. Mismo motivo que separar storage/ en el backend
+// (Fase 1): si mañana cambia la URL, el puerto, o cómo se autentica la
+// petición, solo hay que tocar este archivo — los componentes no llaman a
+// fetch() nunca directamente, llaman a estas funciones.
+const API_URL = "http://localhost:8000";
+
+// GET /topics — trae la lista completa de topics. La usa App.jsx al cargar.
+export async function obtenerTopics() {
+  const respuesta = await fetch(`${API_URL}/topics`);
+  if (!respuesta.ok) {
+    throw new Error("No se pudieron cargar los topics");
+  }
+  return respuesta.json();
+}
+
+// POST /topics — crea un topic nuevo. La usa TopicForm.jsx al enviar el formulario.
+export async function crearTopic(titulo, contenido) {
+  const respuesta = await fetch(`${API_URL}/topics`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ titulo, contenido }),
+  });
+  if (!respuesta.ok) {
+    throw new Error("No se pudo crear el topic");
+  }
+  return respuesta.json();
+}
+
+// POST /topics/{id}/mejorar — pide la sugerencia mock del LLM para un topic
+// concreto. La usa TopicCard.jsx al pulsar "Mejorar con IA (mock)".
+export async function mejorarTopic(id) {
+  const respuesta = await fetch(`${API_URL}/topics/${id}/mejorar`, {
+    method: "POST",
+  });
+  if (!respuesta.ok) {
+    throw new Error("No se pudo generar la sugerencia de mejora");
+  }
+  return respuesta.json();
+}
+```
+
 - **`TopicList.jsx`** — Sin estado propio (no hay ningún `useState`). Datos 
   del backend: recibe `topics` entero como prop desde `App`; no vuelve a 
   pedir nada. Presentación: 100% JSX de pintado — su único "código" es un 
