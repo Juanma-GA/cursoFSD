@@ -54,4 +54,100 @@ React construye SPAs por defecto.
 
 ## Ejercicio
 
-_Pendiente de empezar esta fase._
+Dashboard en React que consume un backend con persistencia real en PostgreSQL 
+(mismo esquema y misma base de datos `ccms` que la Fase 2), con tres 
+funciones: listar topics, crear un topic nuevo, y disparar la mejora mock de 
+un LLM sobre un topic concreto.
+
+### Estructura
+
+```
+fase-3-frontend/
+├── api/                    # copia del backend de fase-2-bases-de-datos/api
+│                            # (idéntico byte a byte salvo main.py, ver nota CORS)
+└── dashboard/               # frontend en React (Vite)
+    └── src/
+        ├── api.js                    # única capa que llama a fetch()
+        ├── App.jsx                   # estado compartido: la lista de topics
+        └── components/
+            ├── TopicForm.jsx          # formulario para crear un topic
+            ├── TopicList.jsx          # pinta la lista (sin estado propio)
+            └── TopicCard.jsx          # una tarjeta + su botón "mejorar"
+```
+
+### Sobre la copia del backend (`api/`)
+
+Es una copia de `fase-2-bases-de-datos/api`, confirmada idéntica con `diff -r` 
+antes de tocar nada. El único cambio posterior fue añadir CORS en `main.py`: 
+en fase-1/fase-2 la API solo se había probado con curl/Swagger (mismo origen 
+que el propio backend); un dashboard corriendo en el navegador desde otro 
+puerto (Vite, `5173`) necesita que el backend permita explícitamente 
+peticiones cross-origin, o el navegador las bloquea por política de mismo 
+origen — el mismo concepto de CORS ya visto en la Fase 0. Routers, services, 
+storage, models y el resto quedan exactamente igual que en fase-2.
+
+### Qué endpoint consume cada componente
+
+| Componente | Endpoint | Cuándo |
+|---|---|---|
+| `App.jsx` | `GET /topics` | Al cargar la página (una vez, en `useEffect`) |
+| `TopicForm.jsx` | `POST /topics` | Al enviar el formulario |
+| `TopicCard.jsx` | `POST /topics/{id}/mejorar` | Al pulsar "Mejorar con IA (mock)" en esa tarjeta |
+
+### Estado, datos del backend y presentación, componente por componente
+
+- **`App.jsx`** — Estado propio (`useState`): `topics`, `cargando`, `error`. 
+  Vive aquí porque tanto `TopicList` (para pintarlo) como `TopicForm` (para 
+  añadirle el topic recién creado) lo necesitan — es "levantar el estado" al 
+  ancestro común. Datos del backend: `topics` se rellena en el `useEffect` 
+  con la respuesta real de `GET /topics`; a partir de ahí es estado de React 
+  que se actualiza localmente (`handleTopicCreado`) sin volver a preguntarle 
+  al backend. Presentación: el layout (`<header>`, dos columnas) no decide 
+  nada, solo organiza dónde va cada hijo.
+
+- **`TopicList.jsx`** — Sin estado propio (no hay ningún `useState`). Datos 
+  del backend: recibe `topics` entero como prop desde `App`; no vuelve a 
+  pedir nada. Presentación: 100% JSX de pintado — su único "código" es un 
+  `.map()` para convertir cada topic en un `<TopicCard>`.
+
+- **`TopicCard.jsx`** — Datos del backend (prop `topic`): `id`, `titulo`, 
+  `contenido`, ya cargados por `App`. Estado propio (`useState`): 
+  `sugerencia`, `mejorando`, `error` — resultado transitorio de pulsar 
+  "Mejorar" en ESA tarjeta concreta; no existen en el backend ni en ningún 
+  otro componente, por eso viven aquí y no en `App`. Presentación: el 
+  `<article>`, títulos y párrafos — solo muestran lo que ya está en 
+  props/estado.
+
+- **`TopicForm.jsx`** — Estado propio (`useState`): `titulo`, `contenido` 
+  (lo que el usuario va escribiendo, no existe todavía en el backend), más 
+  `enviando`/`error` para ese envío concreto. No recibe datos del backend 
+  (es quien los envía). Presentación: los `<input>`/`<textarea>`/`<button>` 
+  pintan el valor actual del estado y notifican cambios, sin decidir nada 
+  por su cuenta. Al terminar, avisa a `App` vía `onTopicCreado` — no sabe ni 
+  le importa cómo se muestra la lista.
+
+### Cómo levantar la API (`fase-3-frontend/api`)
+
+```bash
+cd fase-3-frontend/api
+python -m venv venv
+source venv/bin/activate      # en Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python crear_tablas.py        # crea las tablas en 'ccms' si no existen (idempotente)
+uvicorn main:app --reload
+```
+
+La API queda en `http://localhost:8000` (mismo contenedor Docker 
+`ccms-postgres` de la Fase 2 — ver `fase-2-bases-de-datos/1-README.md`).
+
+### Cómo levantar el dashboard (`fase-3-frontend/dashboard`)
+
+```bash
+cd fase-3-frontend/dashboard
+npm install
+npm run dev
+```
+
+El dashboard queda en `http://localhost:5173`. Con la API corriendo en el 
+`8000`, la página carga los topics existentes, permite crear uno nuevo, y 
+generar la sugerencia mock de mejora sobre cualquiera de ellos.
