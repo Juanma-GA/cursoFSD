@@ -276,3 +276,68 @@ precisarlas:
 Vite sirve el código React al navegador → el navegador ejecuta ese código → 
 el propio JavaScript (no Vite) hace fetch() hacia FastAPI → FastAPI responde 
 → React actualiza la pantalla con esos datos.
+
+## Cómo distinguir estado, props y presentación (con código real)
+
+Tres preguntas rápidas para identificar cada parte de un componente:
+
+1. **¿Viene entre `{ }` en la firma de la función del componente** (ej. 
+   `function TopicCard({ topic })`)? → Es **props**: datos que vienen del 
+   componente padre, que a su vez normalmente vinieron de una llamada fetch() 
+   al backend. El componente no los genera, solo los recibe y los muestra.
+
+2. **¿Se declaró con `useState`?** → Es **estado**: algo que cambia con el 
+   tiempo, propio de ese componente, que al cambiar hace que React vuelva a 
+   pintar la pantalla para reflejarlo.
+
+3. **¿Es solo una etiqueta JSX que muestra texto fijo o estructura, sin ser 
+   ninguna de las dos anteriores?** → Es **presentación pura**: no tiene 
+   lógica propia, solo pinta o captura una interacción (como un onClick) que 
+   dispara algo definido en otro sitio.
+
+### Ejemplo 1: props (pregunta 1) — `TopicCard.jsx`, líneas 20 y 40-41
+
+```jsx
+function TopicCard({ topic }) {           // ← props: "topic" viene entre { }
+  // ...
+  return (
+    <article className="topic-card">
+      <h3>{topic.titulo}</h3>              {/* ← props: solo lee topic.titulo */}
+      <p>{topic.contenido}</p>             {/* ← props: solo lee topic.contenido */}
+```
+
+`topic` llega entre `{ }` en la firma de la función (pregunta 1: sí) → es 
+props. `TopicCard` nunca genera `topic.titulo` ni `topic.contenido` por su 
+cuenta — le llegaron ya resueltos desde `App` (que a su vez los obtuvo de 
+`GET /topics`), y aquí solo se leen para pintarlos.
+
+### Ejemplo 2: estado (pregunta 2) — `TopicCard.jsx`, líneas 21-23
+
+```jsx
+const [sugerencia, setSugerencia] = useState(null);
+const [mejorando, setMejorando] = useState(false);
+const [error, setError] = useState(null);
+```
+
+Las tres están declaradas con `useState` (pregunta 2: sí) → son estado. 
+Ninguna llega por props ni existía antes de que el usuario interactuara con 
+esta tarjeta: `sugerencia` empieza en `null` y solo cambia si se pulsa 
+"Mejorar" y la API responde; `mejorando` alterna entre `true`/`false` 
+mientras dura esa petición; `error` solo se rellena si la petición falla. Al 
+cambiar cualquiera de las tres, React vuelve a pintar la tarjeta para 
+reflejarlo (ej. el botón pasa a decir "Generando sugerencia...").
+
+### Ejemplo 3: presentación pura (pregunta 3) — `TopicCard.jsx`, líneas 43-45
+
+```jsx
+<button onClick={handleMejorar} disabled={mejorando}>
+  {mejorando ? "Generando sugerencia..." : "Mejorar con IA (mock)"}
+</button>
+```
+
+No viene por props ni se declara con `useState` (pregunta 1 y 2: no) → es 
+presentación pura. El `<button>` en sí no decide nada: solo lee el estado ya 
+existente (`mejorando`) para mostrar un texto u otro y para desactivarse, y 
+captura el clic (`onClick`) para disparar `handleMejorar`, una función 
+definida más arriba en el propio componente — el botón no sabe qué hace esa 
+función, solo que debe llamarla al pulsarlo.
