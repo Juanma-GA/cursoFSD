@@ -454,3 +454,27 @@ existente (`mejorando`) para mostrar un texto u otro y para desactivarse, y
 captura el clic (`onClick`) para disparar `handleMejorar`, una función 
 definida más arriba en el propio componente — el botón no sabe qué hace esa 
 función, solo que debe llamarla al pulsarlo.
+
+## Herramienta recomendada: React Developer Tools
+
+Extensión de navegador que añade una pestaña "⚛️ Components" a las DevTools 
+(F12), permitiendo ver en vivo el árbol de componentes, sus props, y su 
+estado (hooks) — la forma más directa de comprobar visualmente los conceptos 
+de estado/props/presentación vistos en este documento.
+
+Descarga (Chrome, Edge, y navegadores basados en Chromium):
+https://chromewebstore.google.com/detail/react-developer-tools/fmkadmapgofadopljbjfkapdkoienihi
+
+Tras instalarla, con el dashboard abierto en localhost:5173:
+1. Abrir DevTools (F12) y buscar la pestaña "⚛️ Components" (si no aparece, 
+   cerrar y reabrir las DevTools, o recargar la página).
+2. Hacer clic en cualquier componente del árbol (App, TopicCard, etc.) para 
+   ver sus props y su estado (hooks) en el panel derecho.
+3. Con el panel abierto, interactuar con el dashboard (crear un topic, pulsar 
+   "Mejorar con IA") y observar cómo el estado cambia en tiempo real — 
+   confirmación visual de que cada componente maneja su propio estado de 
+   forma independiente.
+
+Nota: en entornos corporativos gestionados, puede requerir reiniciar el 
+navegador por completo tras la instalación para que la extensión se active 
+correctamente.
