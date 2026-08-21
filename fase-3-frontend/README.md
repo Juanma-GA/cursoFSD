@@ -105,6 +105,59 @@ storage, models y el resto quedan exactamente igual que en fase-2.
   al backend. Presentación: el layout (`<header>`, dos columnas) no decide 
   nada, solo organiza dónde va cada hijo.
 
+## Aclaración: useState no "toma el valor" de fetch() directamente
+
+Es un error común pensar que useState se conecta directamente con fetch(). 
+En realidad son dos pasos distintos:
+
+1. **`useState([])` solo crea el estado con un valor inicial** — en este 
+   caso, un array vacío. En el momento en que App() se ejecuta por primera 
+   vez, `topics` no tiene nada que ver con el backend todavía: es solo `[]`, 
+   el valor de partida elegido (por eso al principio se ve la lista vacía o 
+   un estado de "cargando" antes de que aparezcan los topics reales).
+
+2. **El que conecta el resultado de fetch() con el estado es 
+   `.then(setTopics)`, dentro del useEffect.** Es literalmente lo mismo que 
+   escribir `.then(datos => setTopics(datos))` — cuando la promesa de 
+   obtenerTopics() se resuelve, se llama a setTopics con esos datos.
+
+La secuencia real, paso a paso:
+1. App() se ejecuta, useState([]) crea topics = []
+2. useEffect se dispara (dependencias [] → una sola vez, al montar el 
+   componente)
+3. Se llama a obtenerTopics() (vive en api.js, con el fetch() real)
+4. Cuando la promesa de fetch() se resuelve, .then(setTopics) actualiza el 
+   estado con el resultado
+5. setTopics(datos) hace que React vuelva a ejecutar App() entera, esta vez 
+   con topics ya lleno de datos reales
+
+Conclusión: useState = declarar el estado (la "caja" donde guardar el valor). 
+setTopics = actualizarlo con lo que sea — en este caso datos que vinieron de 
+la red, pero podría ser cualquier otra cosa.
+
+```mermaid
+flowchart TB
+    Start["App() se ejecuta por primera vez"] --> Init["useState([]) crea el estado:<br/>topics = [] (valor inicial, SIN datos del backend)"]
+    Init --> Render1["React pinta la pantalla<br/>con topics vacío (o 'cargando')"]
+    Render1 --> Effect["useEffect se dispara<br/>(dependencias: [] → solo una vez, al montar)"]
+
+    Effect --> Call["Se llama a obtenerTopics()<br/>(función en api.js, contiene el fetch() real)"]
+    Call --> HTTP["fetch('http://localhost:8000/topics')<br/>petición HTTP de verdad"]
+    HTTP --> Response["El backend responde con JSON<br/>(la promesa de fetch se resuelve)"]
+    Response --> Then[".then(setTopics)<br/>= .then(datos => setTopics(datos))"]
+
+    Then --> Update["setTopics(datos) ACTUALIZA el estado"]
+    Update --> Rerun["React descarta el App() anterior<br/>y ejecuta App() de nuevo, desde cero"]
+    Rerun --> Init2["useState esta vez devuelve<br/>el valor NUEVO de topics (ya con datos reales)"]
+    Init2 --> Render2["React repinta la pantalla<br/>con los topics reales visibles"]
+
+    style Init fill:#1e3a2e,color:#fff
+    style Init2 fill:#1e3a2e,color:#fff
+    style HTTP fill:#3a1e1e,color:#fff
+    style Update fill:#3a1e1e,color:#fff
+    style Call fill:#1e293b,color:#fff
+```
+
 ## Aclaración: dónde vive exactamente el fetch()
 
 App.jsx no escribe fetch() directamente — llama a funciones importadas desde 
