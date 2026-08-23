@@ -48,6 +48,31 @@ correr los tests, y si pasan, desplegar la nueva versión. Reduce errores
 humanos porque elimina el paso "me acordé de probarlo antes de subirlo" — el 
 sistema lo hace siempre, sin excepción.
 
+#### Aclaración: qué significan CI y CD exactamente
+
+**CI = Continuous Integration (Integración Continua).** Cada vez que se sube 
+código (vía PR o push), un sistema automático construye e integra ese código 
+con el resto del proyecto, y ejecuta comprobaciones (tests, linters) para 
+detectar problemas cuanto antes — antes de que ese código se mezcle de 
+verdad con el trabajo de los demás. En vez de integrar todo el trabajo de 
+golpe tras semanas aisladas (con conflictos masivos), se integra 
+constantemente, en piezas pequeñas, detectando roturas al momento.
+
+**CD tiene dos significados distintos:**
+- **Continuous Delivery (Entrega Continua)**: el código, tras pasar todos 
+  los checks automáticos, queda listo para desplegarse en cualquier 
+  momento — pero el despliegue final a producción sigue siendo una decisión 
+  humana.
+- **Continuous Deployment (Despliegue Continuo)**: un paso más allá — si 
+  todo pasa los checks automáticos, se despliega a producción sin 
+  intervención humana.
+
+**Alcance de este ejercicio**: se implementa solo la parte de CI (ejecutar 
+tests automáticamente en cada push) — la parte de CD no aplica todavía 
+porque no existe ningún servidor de producción desplegado, solo el entorno 
+local. Es un matiz importante: "CI/CD" se suele decir como una sola cosa, 
+pero en este proyecto, por ahora, solo se implementa la mitad (CI).
+
 ## Ejercicio
 
 _Pendiente de empezar esta fase._
