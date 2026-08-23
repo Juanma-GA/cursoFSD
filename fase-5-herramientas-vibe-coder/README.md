@@ -75,4 +75,60 @@ pero en este proyecto, por ahora, solo se implementa la mitad (CI).
 
 ## Ejercicio
 
-_Pendiente de empezar esta fase._
+### Variables de entorno: sacar las credenciales de PostgreSQL del código
+
+Primer paso práctico de esta fase: corregir que `api/database.py` tuviera 
+las credenciales de PostgreSQL escritas directamente en el código.
+
+**Antes:**
+```python
+DATABASE_URL = "postgresql+psycopg2://postgres:curso123@localhost:5432/ccms"
+```
+La contraseña real (`curso123`) quedaba visible en el código fuente, y por 
+tanto en el historial de Git en cuanto se hiciera commit — cualquiera con 
+acceso al repositorio (o a una copia pública de él) vería la contraseña de 
+la base de datos.
+
+**Después:**
+```python
+load_dotenv()
+
+POSTGRES_HOST = os.getenv("POSTGRES_HOST")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+POSTGRES_DB = os.getenv("POSTGRES_DB")
+
+DATABASE_URL = (
+    f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
+    f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+)
+```
+Las credenciales ahora viven en un archivo `.env` (fuera de Git), leído en 
+tiempo de ejecución con `python-dotenv`. El código ya no contiene ningún 
+valor real — solo los nombres de las variables que necesita.
+
+### Por qué `.env` nunca debe subirse a Git, pero `.env.example` sí
+
+- **`.env`**: contiene las credenciales reales (usuario, contraseña, host, 
+  puerto, nombre de la base de datos) del entorno de quien lo creó. Si se 
+  sube a Git, esas credenciales quedan expuestas para siempre en el 
+  historial del repositorio, aunque después se borre el archivo — un 
+  `git log`/`git show` de un commit antiguo las seguiría mostrando. Por eso 
+  se añade a `.gitignore`: Git lo ignora por completo, nunca llega a 
+  proponerse en un commit.
+- **`.env.example`**: contiene los mismos nombres de variable, pero con 
+  valores de ejemplo genéricos (`tu_usuario`, `tu_password`...), sin ningún 
+  dato real. Este archivo sí se sube a Git, precisamente para que cualquiera 
+  que clone el repositorio sepa qué variables de entorno necesita crear en 
+  su propio `.env` local, sin exponer las credenciales de nadie.
+
+### Verificación
+
+Se instaló `python-dotenv`, se creó `api/.env` con las credenciales reales, 
+se creó `api/.env.example` con valores de ejemplo, y se añadió `api/.gitignore` 
+con la entrada `.env`. Se levantó el servidor (`uvicorn main:app`) y se 
+comprobó que sigue conectando correctamente a PostgreSQL y sirviendo 
+`/topics` con datos reales, exactamente igual que antes del cambio — el 
+único comportamiento distinto es de dónde vienen las credenciales, no cómo 
+funciona la conexión.
