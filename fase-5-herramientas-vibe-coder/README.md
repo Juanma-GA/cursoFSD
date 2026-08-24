@@ -461,3 +461,62 @@ romper nada, porque no pasan por esa conversión numérica.
    `PASSED`, el diff con `-`/`+`, la línea exacta del fallo) — exactamente 
    el mismo formato ya explicado más arriba, solo que ejecutado por GitHub 
    en vez de en la propia máquina.
+
+## Checkpoint resuelto: desplegar y aislar el LLM local
+
+Pregunta del checkpoint: ¿cómo explicarle a IT de ATEXIS, en sus términos, 
+cómo se desplegaría y aislaría el componente del LLM local?
+
+Un .env resuelve solo una pieza (dónde guardar credenciales sin exponerlas 
+en el código) — la pregunta real de IT es más amplia: dónde vive físicamente 
+el LLM, qué recursos necesita, y cómo se evita que un fallo ahí afecte al 
+resto del sistema.
+
+### 1. Dónde corre: contenedor Docker dedicado
+
+El LLM local se empaqueta en su propia imagen Docker, corriendo en un 
+contenedor separado del backend FastAPI — mismo patrón ya usado con 
+ccms-postgres. Diferencia real: este contenedor necesita acceso a GPU 
+(recursos de hardware específicos), la razón técnica identificada en la 
+Fase 4 de por qué vive separado del backend.
+
+### 2. Qué pasa si falla, se satura, o hay que actualizarlo
+
+Al vivir en su propio contenedor:
+- IT puede reiniciarlo, actualizarlo, o moverlo de servidor sin tocar el 
+  backend ni la base de datos.
+- Si se cae, el resto del CCMS (crear topics, listar, workflow) sigue 
+  funcionando — solo falla la función de "mejorar con IA", degradación 
+  aislada, no caída total.
+- Puede escalar de forma independiente (más VRAM, más instancias) sin 
+  replicar todo el backend.
+
+### 3. Aislamiento de red y seguridad (residencia de datos)
+
+El requisito "los datos no salen de España" se traduce en: el contenedor del 
+LLM no tiene salida a internet — solo acepta conexiones desde el backend, en 
+la misma red interna/privada de Docker (o de la infraestructura de ATEXIS), 
+sin ninguna ruta hacia servicios externos. Se configura explícitamente 
+(reglas de red de Docker, o firewall de la máquina), no es un comportamiento 
+por defecto.
+
+### 4. Credenciales y configuración
+
+La URL interna del LLM y cualquier clave de API interna entre backend y LLM 
+viven en variables de entorno (.env), nunca hardcodeadas — mismo patrón 
+practicado en esta fase con las credenciales de PostgreSQL. En un entorno 
+corporativo real, estas credenciales probablemente vivirían en un gestor de 
+secretos centralizado (Vault, o el que use la organización), no en un .env 
+suelto por servidor — ampliación mencionada en la teoría de seguridad de la 
+Fase 4.
+
+### Resumen para IT
+
+"El LLM corre en su propio contenedor Docker, separado del backend, con 
+acceso a GPU dedicada. Solo acepta conexiones desde la red interna donde 
+vive el backend, sin salida a internet — así se garantiza que los datos no 
+salen de España. Si el LLM falla o necesita actualizarse, se reinicia o 
+reemplaza sin afectar al resto del CCMS, porque el backend le habla a través 
+de una API interna, no está integrado en el mismo proceso. Las credenciales 
+de esa comunicación interna viven en variables de entorno, nunca en el 
+código."
