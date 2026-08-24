@@ -11,11 +11,18 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 # lista de variables necesarias.
 load_dotenv()
 
-POSTGRES_HOST = os.getenv("POSTGRES_HOST")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT")
-POSTGRES_USER = os.getenv("POSTGRES_USER")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-POSTGRES_DB = os.getenv("POSTGRES_DB")
+# Los valores por defecto (segundo argumento de os.getenv) solo evitan que
+# construir DATABASE_URL falle cuando no hay .env -- es el caso de CI
+# (GitHub Actions), donde .env nunca existe a propósito (está en
+# .gitignore). No son credenciales reales ni necesitan serlo: los tests
+# nunca llegan a conectarse con ellas -- sustituyen SessionLocal por SQLite
+# en memoria vía monkeypatch (ver test_topics.py) antes de que se use
+# ninguna conexión de verdad.
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "ccms")
 
 DATABASE_URL = (
     f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}"

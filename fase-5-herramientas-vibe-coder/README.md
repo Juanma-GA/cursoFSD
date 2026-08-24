@@ -353,6 +353,56 @@ de `postgres`, variables de entorno con las credenciales de esa base de
 datos de test, y probablemente un paso de espera activa hasta que el 
 servicio esté listo para aceptar conexiones — nada de eso hace falta aquí.
 
+### Fallo real de CI y su corrección: create_engine() sin variables de entorno
+
+La primera ejecución del workflow falló con 
+`ValueError: invalid literal for int() with base 10: 'None'` dentro de 
+`database.py`. Causa: `.env` está en `.gitignore` a propósito (nunca se sube 
+a Git — ver la sección de variables de entorno más arriba), así que en el 
+runner de GitHub Actions no existe ningún `.env`, y 
+`os.getenv("POSTGRES_PORT")` devolvía `None` — `create_engine()` fallaba al 
+intentar construir la URL de conexión con un puerto `None`.
+
+**Solución aplicada**: valores por defecto en `database.py`, con 
+`os.getenv("VAR", "valor_por_defecto")` en vez de `os.getenv("VAR")`:
+```python
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "ccms")
+```
+No se tocó `tests.yml` con un bloque `env:` adicional — solo se aplicó la 
+opción de los valores por defecto en `database.py`, por dos razones:
+- Es una única fuente de verdad: si mañana se renombra o se añade una 
+  variable, solo hay que tocar `database.py`, no mantener sincronizados dos 
+  sitios (el código y el workflow) con los mismos nombres de variable.
+- Arregla el problema en cualquier entorno sin `.env`, no solo en GitHub 
+  Actions — por ejemplo, si alguien clona el repo y ejecuta los tests antes 
+  de crear su propio `.env`, ya no falla igual.
+
+Esos valores por defecto (`localhost`, `postgres`/`postgres`, `ccms`) **no 
+son las credenciales reales** del contenedor Docker (`curso123`) — son 
+valores genéricos que solo sirven para que `create_engine()` pueda 
+construir la cadena de conexión sin lanzar una excepción al importar el 
+módulo. `create_engine()` no conecta de verdad en ese momento (SQLAlchemy 
+crea el engine de forma perezosa, sin abrir conexión hasta que se usa), y 
+en los tests nunca llega a usarse esa conexión real de todos modos: 
+`test_topics.py` sustituye `SessionLocal` por SQLite en memoria vía 
+`monkeypatch` antes de que se ejecute ninguna petición (ver "Estrategia de 
+base de datos para los tests" más arriba) — por eso unos valores por 
+defecto que no apuntan a nada real son suficientes.
+
+**Verificación en local**: se confirmó que, con el `.env` real presente, 
+`DATABASE_URL` sigue construyéndose con las credenciales reales de Docker 
+exactamente igual que antes del cambio, y los 4 tests siguen pasando. 
+Simulando además el escenario de CI (renombrando `.env` temporalmente para 
+que no exista, y devolviéndolo a su sitio después), `DATABASE_URL` se 
+construye con los valores por defecto sin lanzar ningún error, y los 4 
+tests también pasan — sin necesitar Docker ni PostgreSQL real corriendo en 
+ningún caso. El `.env` real no se modificó ni se subió a Git en ningún 
+momento de esta corrección.
+
 ### Cómo ver este workflow ejecutándose en GitHub
 
 1. En la página del repositorio en GitHub, la pestaña **Actions** está en 
