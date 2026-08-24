@@ -1,0 +1,30 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Instalar dependencias
+        working-directory: fase-5-herramientas-vibe-coder/api
+        run: pip install -r requirements.txt
+
+      - name: Ejecutar tests con pytest
+        working-directory: fase-5-herramientas-vibe-coder/api
+        run: python -m pytest -v

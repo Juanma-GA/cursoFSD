@@ -332,3 +332,47 @@ algo falla, porque solo entonces hay algo que explicar.
 comparar visualmente en Swagger si algo "se ve bien" — pytest da 
 automáticamente la línea exacta, el valor esperado, y el valor real, uno al 
 lado del otro.
+
+### CI: workflow de GitHub Actions que ejecuta los tests automáticamente
+
+Se añadió `.github/workflows/tests.yml` en la raíz del repositorio: un 
+workflow de GitHub Actions que ejecuta los 4 tests de pytest en cada push a 
+`main` (y en cada pull request contra `main`), sin intervención manual — la 
+pieza de CI descrita conceptualmente más arriba, ahora implementada de 
+verdad.
+
+**No hace falta levantar ningún servicio de base de datos**: el workflow no 
+incluye ningún bloque `services:` de PostgreSQL. Como los tests usan SQLite 
+en memoria (ver "Estrategia de base de datos para los tests" más arriba), 
+todo lo que necesitan ya está disponible con solo instalar 
+`requirements.txt` — no hay que levantar un contenedor Docker de PostgreSQL 
+dentro del runner, ni esperar a que esté listo, ni configurar credenciales 
+de test en secrets de GitHub. Si los tests dependieran de PostgreSQL real, 
+el workflow necesitaría bastante más: un bloque `services:` con la imagen 
+de `postgres`, variables de entorno con las credenciales de esa base de 
+datos de test, y probablemente un paso de espera activa hasta que el 
+servicio esté listo para aceptar conexiones — nada de eso hace falta aquí.
+
+### Cómo ver este workflow ejecutándose en GitHub
+
+1. En la página del repositorio en GitHub, la pestaña **Actions** está en 
+   la barra superior, junto a "Code", "Issues", "Pull requests"... — es la 
+   pestaña donde GitHub lista todas las ejecuciones de workflows.
+2. Cada push a `main` (o cada pull request contra `main`) aparece ahí como 
+   una fila nueva, con el mensaje del commit, cuándo se ejecutó, y un 
+   icono de estado:
+   - 🟢 **Verde (check)**: todos los tests pasaron.
+   - 🔴 **Rojo (cruz)**: al menos un test falló, o el workflow no pudo 
+     completarse (ej. un error instalando dependencias).
+   - 🟡 **Amarillo (círculo)**: la ejecución está en curso todavía.
+3. Ese mismo icono aparece también junto al commit en el historial normal 
+   de commits, y junto al pull request si el push viene de uno — no hace 
+   falta entrar en Actions para tener una primera señal de si algo falló.
+4. **Para ver el detalle si algo falla**: clic en la ejecución concreta 
+   (dentro de la pestaña Actions) → clic en el job `pytest` → se despliega 
+   la lista de pasos (Checkout, Instalar Python, Instalar dependencias, 
+   Ejecutar tests) y se puede expandir cada uno. El paso "Ejecutar tests 
+   con pytest" muestra la misma salida que se vería en local (`FAILED`/
+   `PASSED`, el diff con `-`/`+`, la línea exacta del fallo) — exactamente 
+   el mismo formato ya explicado más arriba, solo que ejecutado por GitHub 
+   en vez de en la propia máquina.
