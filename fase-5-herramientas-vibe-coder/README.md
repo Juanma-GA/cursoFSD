@@ -403,6 +403,41 @@ tests también pasan — sin necesitar Docker ni PostgreSQL real corriendo en
 ningún caso. El `.env` real no se modificó ni se subió a Git en ningún 
 momento de esta corrección.
 
+### Aclaración: por qué os.getenv(..., "valor") arregla esto
+
+`os.getenv("NOMBRE")`, con un solo argumento, significa "busca esta 
+variable, y si no existe, devuelve None". En la máquina local, con .env 
+presente, esto funciona sin problema. En GitHub Actions, sin .env, devuelve 
+literalmente None — y más adelante, cuando SQLAlchemy intenta convertir el 
+puerto a número con `int(components["port"])`, falla porque no se puede 
+convertir None a entero (de ahí el error `invalid literal for int() with 
+base 10: 'None'`).
+
+`os.getenv("NOMBRE", "valor_por_defecto")`, con un segundo argumento, 
+significa "si no existe, usa este valor de repuesto en vez de devolver 
+None". Con esto, en GitHub Actions, POSTGRES_PORT pasa a valer "5432" (texto 
+válido, convertible a número) en vez de None.
+
+### El valor por defecto es arbitrario — solo evita el None, la conexión nunca se usa
+
+Estos valores (`localhost`, `5432`, `postgres`...) no necesitan ser 
+"correctos" ni funcionales de verdad: `create_engine()` en SQLAlchemy es 
+"perezoso" (lazy) — solo construye el objeto que describe cómo conectarse, 
+sin abrir ninguna conexión real hasta que alguien ejecuta una consulta. Como 
+`monkeypatch` sustituye `SessionLocal` por SQLite antes de que cualquier 
+test dispare una consulta, ese engine de PostgreSQL con credenciales de 
+relleno nunca llega a usarse — es un objeto construido pero nunca conectado.
+
+Por qué usar valores "con sentido" en vez de texto aleatorio, aunque no sea 
+obligatorio: legibilidad (se explican solos a quien lea el código sin 
+contexto), y un mejor mensaje de error si por accidente alguien intentara 
+usar ese engine de verdad fuera de tests (fallaría con un error de conexión 
+claro, no con una confusión de tipos). Matiz técnico real: el puerto 
+específicamente debe ser algo convertible a número con int() — un valor 
+como "xyz123" fallaría igual que None. El resto de valores (host, usuario, 
+contraseña, nombre de BD) sí podrían ser prácticamente cualquier texto sin 
+romper nada, porque no pasan por esa conversión numérica.
+
 ### Cómo ver este workflow ejecutándose en GitHub
 
 1. En la página del repositorio en GitHub, la pestaña **Actions** está en 
