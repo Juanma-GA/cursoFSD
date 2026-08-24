@@ -202,6 +202,49 @@ en él (`Base.metadata.create_all`), y se sustituye en caliente
   falta una PostgreSQL de test separada (o Docker en el propio CI) para que 
   los tests reflejen fielmente el comportamiento real.
 
+### Aclaración: cómo se aísla la base de datos de test (con analogía)
+
+Los tests no copian ni usan ningún dato de la PostgreSQL real de Docker — 
+empiezan con una base de datos completamente vacía y nueva, creada desde 
+cero en cada ejecución. Cada test crea sus propios datos de prueba (ej. un 
+POST /topics con datos inventados), igual que se haría a mano con Swagger — 
+esto es intencionado: un test no debe depender de qué datos existan en el 
+Docker real en ese momento.
+
+**Dónde vive esa base de datos**: `sqlite:///:memory:` vive en la RAM del 
+propio proceso de pytest, igual que MemoryStore (Fase 1) vivía en la RAM de 
+uvicorn — no hay ningún archivo en disco ni conexión a Docker. Al terminar 
+el test, esa base de datos desaparece por completo.
+
+**Analogía del mecanismo (monkeypatch)**: main.py/routers/services son como 
+un electricista que siempre enchufa su taladro al mismo enchufe de pared 
+(SessionLocal, la conexión a la base de datos) — no sabe ni le importa de 
+dónde viene la corriente. Para los tests, en vez de recablear la casa 
+entera (reescribir el código de producción), se desconecta momentáneamente 
+ese enchufe de la red real y se conecta a una pila portátil (SQLite en 
+memoria) — el electricista sigue enchufando su taladro exactamente igual, 
+sin enterarse del cambio.
+
+**El mecanismo técnico real, paso a paso:**
+1. `storage/memory_store.py` hace `from database import SessionLocal` al 
+   importarse — obtiene la "fábrica de conexiones" desde database.py.
+2. Normalmente esa SessionLocal apunta a PostgreSQL real (Docker).
+3. En el test, antes de ejecutar cualquier petición de prueba, se crea una 
+   SessionLocal distinta, apuntando a SQLite en memoria.
+4. `monkeypatch.setattr(memory_store, "SessionLocal", session_local_de_test)` 
+   sustituye temporalmente esa variable, solo durante ese test.
+5. Cuando el test hace POST /topics, la petición pasa por 
+   routers → services → storage/memory_store.py, que llama a SessionLocal() 
+   como siempre — solo que ahora, por el monkeypatch, apunta a la base de 
+   datos temporal en RAM.
+
+**Por qué es mejor que modificar database.py a mano**: nunca se toca ni un 
+carácter del código de producción — el cambio ocurre completamente desde el 
+archivo de test, y se deshace automáticamente al terminar cada test 
+(monkeypatch de pytest revierte el cambio solo). Como storage/ es la única 
+pieza que habla con la base de datos, es la única pieza que hace falta 
+redirigir para testear.
+
 ### Cómo se ve un test que pasa frente a uno que falla
 
 Se rompió deliberadamente `test_crear_topic_devuelve_201_con_id_asignado` 
@@ -255,3 +298,37 @@ test_topics.py::test_mejorar_topic_inexistente_devuelve_404 PASSED       [100%]
 ```
 Un test que pasa no imprime nada de contexto adicional — solo `PASSED` y el 
 resumen final; el detalle (traceback, diff) solo aparece cuando algo falla.
+
+### Aclaración: cómo leer la salida de un test que falla, línea por línea
+
+**Resumen rápido por test**: cada línea (`FAILED`/`PASSED`) indica de un 
+vistazo cuál test tiene el problema, sin necesidad de leer nada más si solo 
+se quiere saber si algo falló.
+
+**El código del test con el fallo señalado**: pytest muestra el test 
+completo, con un símbolo `>` justo antes de la línea exacta donde ocurrió el 
+fallo — las líneas anteriores (ej. `status_code == 201`) sí pasaron, solo 
+esa línea concreta falló.
+
+**El diff (la parte más útil)**:
+```
+E - Un título completamente distinto
+E + Instalar el driver
+```
+El `-` es lo que el test esperaba (lo escrito en el assert); el `+` es lo 
+que realmente devolvió la API. En este ejemplo concreto, la API funcionó 
+correctamente — el error estaba en el test (esperaba algo incorrecto a 
+propósito para esta demostración), no en el código de producción.
+
+**El resumen final** (`1 failed, 3 passed, 1 warning in 0.74s`): útil con 
+muchos tests, sin necesidad de leer cada detalle para saber el resultado 
+global.
+
+**Cuando el test se corrige**, la salida se reduce a solo PASSED por cada 
+test, sin ningún detalle adicional — pytest solo se vuelve verboso cuando 
+algo falla, porque solo entonces hay algo que explicar.
+
+**La ventaja frente a depurar a mano**: no hace falta ningún print() ni 
+comparar visualmente en Swagger si algo "se ve bien" — pytest da 
+automáticamente la línea exacta, el valor esperado, y el valor real, uno al 
+lado del otro.
