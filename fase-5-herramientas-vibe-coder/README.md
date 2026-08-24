@@ -132,3 +132,126 @@ comprobó que sigue conectando correctamente a PostgreSQL y sirviendo
 `/topics` con datos reales, exactamente igual que antes del cambio — el 
 único comportamiento distinto es de dónde vienen las credenciales, no cómo 
 funciona la conexión.
+
+### Tests con pytest para la API de topics
+
+Se añadió `api/test_topics.py` con 4 tests sobre los endpoints de `/topics`, 
+usando `pytest` y el `TestClient` de FastAPI (basado en `httpx`).
+
+**Cómo ejecutarlos:**
+```bash
+cd fase-5-herramientas-vibe-coder/api
+python3 -m pytest -v
+```
+
+**Qué verifica cada test:**
+- `test_crear_topic_devuelve_201_con_id_asignado`: hace `POST /topics` y 
+  comprueba que responde 201 con un `id` asignado y el `titulo`/`contenido` 
+  enviados.
+- `test_listar_topics_incluye_el_topic_recien_creado`: crea un topic y 
+  comprueba que `GET /topics` lo incluye en la lista devuelta.
+- `test_mejorar_topic_existente_devuelve_sugerencia`: crea un topic y llama 
+  a `POST /topics/{id}/mejorar`, comprobando que devuelve 200 con el 
+  contenido original y una sugerencia mejorada (limpieza de espacios, 
+  mayúscula inicial, punto final — ver `_mock_mejora_legibilidad` en 
+  `services/topics_service.py`).
+- `test_mejorar_topic_inexistente_devuelve_404`: llama a 
+  `POST /topics/999999/mejorar` (un id que no existe) y comprueba que 
+  responde 404. Nota: actualmente no existe un endpoint `GET /topics/{id}` 
+  individual (solo `GET /topics` en lista) — el único endpoint que trata un 
+  id inexistente como error es `mejorar`, así que es el que se usa para 
+  probar el caso 404.
+
+### Estrategia de base de datos para los tests
+
+Los tests usan **SQLite en memoria** (`sqlite:///:memory:`), no la 
+PostgreSQL real de Docker (`ccms`).
+
+Cómo se consigue sin tocar el código de producción: `storage/memory_store.py` 
+hace `from database import SessionLocal` al importarse — no usa el sistema 
+de dependencias de FastAPI (`Depends`) para inyectar la sesión de base de 
+datos, la importa directamente. Por eso, en un *fixture* de pytest, se crea 
+un engine y una `sessionmaker` de SQLite en memoria, se crean las 9 tablas 
+en él (`Base.metadata.create_all`), y se sustituye en caliente 
+`memory_store.SessionLocal` por esa fábrica de sesiones de test 
+(`monkeypatch.setattr`) antes de cada test — el código de `main.py`, 
+`routers/` y `services/` no se entera del cambio, sigue llamando a 
+`memory_store` exactamente igual.
+
+**Por qué SQLite en memoria y no una PostgreSQL de test separada:**
+- **Velocidad y aislamiento total**: cada test crea su propia base de datos 
+  vacía en memoria (fixture con scope de función) y la descarta al 
+  terminar — no hay estado compartido entre tests, ni riesgo de que el 
+  orden de ejecución afecte al resultado, ni necesidad de limpiar filas a 
+  mano.
+- **No depende de que Docker esté levantado**: los tests pasan igual esté o 
+  no corriendo el contenedor `ccms-postgres` — de hecho, se comprobó que los 
+  4 tests pasan con el servicio de PostgreSQL completamente parado. Esto 
+  importa especialmente de cara a CI (ver sección de CI/CD más abajo): un 
+  runner de GitHub Actions no tiene por qué tener PostgreSQL preinstalado ni 
+  levantar un contenedor extra solo para poder ejecutar los tests.
+- **Nunca hay riesgo de tocar datos reales**: al ser una base de datos 
+  completamente distinta (no la `ccms` de Docker), es estructuralmente 
+  imposible que un test borre o corrompa contenido real por error.
+- **Por qué es aceptable aquí**: el esquema de este proyecto 
+  (`objetos_contenido`, `revisiones`, etc.) usa tipos de columna genéricos 
+  (`Integer`, `String`, `Text`, `DateTime`, claves foráneas) sin nada 
+  específico de PostgreSQL (sin `JSONB`, arrays, `ILIKE`...), así que SQLite 
+  se comporta de forma equivalente para lo que estos tests comprueban. Si en 
+  el futuro se usara alguna función específica de PostgreSQL, ahí sí haría 
+  falta una PostgreSQL de test separada (o Docker en el propio CI) para que 
+  los tests reflejen fielmente el comportamiento real.
+
+### Cómo se ve un test que pasa frente a uno que falla
+
+Se rompió deliberadamente `test_crear_topic_devuelve_201_con_id_asignado` 
+(comprobando un título distinto al que realmente se envía) para ver la 
+salida de un fallo real, y después se corrigió de vuelta.
+
+**Salida con el test roto (`1 failed, 3 passed`):**
+```
+test_topics.py::test_crear_topic_devuelve_201_con_id_asignado FAILED     [ 25%]
+test_topics.py::test_listar_topics_incluye_el_topic_recien_creado PASSED [ 50%]
+test_topics.py::test_mejorar_topic_existente_devuelve_sugerencia PASSED  [ 75%]
+test_topics.py::test_mejorar_topic_inexistente_devuelve_404 PASSED       [100%]
+
+=================================== FAILURES ===================================
+________________ test_crear_topic_devuelve_201_con_id_asignado _________________
+
+client = <starlette.testclient.TestClient object at 0x7f052db70090>
+
+    def test_crear_topic_devuelve_201_con_id_asignado(client):
+        respuesta = client.post(
+            "/topics",
+            json={"titulo": "Instalar el driver", "contenido": "Pasos para instalar el driver."},
+        )
+
+        assert respuesta.status_code == 201
+        datos = respuesta.json()
+        assert datos["id"] is not None
+>       assert datos["titulo"] == "Un título completamente distinto"
+E       AssertionError: assert 'Instalar el driver' == 'Un título co...ente distinto'
+E
+E         - Un título completamente distinto
+E         + Instalar el driver
+
+test_topics.py:57: AssertionError
+=========================== short test summary info ============================
+FAILED test_topics.py::test_crear_topic_devuelve_201_con_id_asignado - Assert...
+==================== 1 failed, 3 passed, 1 warning in 0.74s ====================
+```
+pytest señala exactamente qué test falló, en qué línea, y muestra un diff 
+(`-`/`+`) entre lo esperado y lo recibido — no hace falta añadir ningún 
+`print()` manual para depurarlo.
+
+**Salida tras corregir el test (`4 passed`):**
+```
+test_topics.py::test_crear_topic_devuelve_201_con_id_asignado PASSED     [ 25%]
+test_topics.py::test_listar_topics_incluye_el_topic_recien_creado PASSED [ 50%]
+test_topics.py::test_mejorar_topic_existente_devuelve_sugerencia PASSED  [ 75%]
+test_topics.py::test_mejorar_topic_inexistente_devuelve_404 PASSED       [100%]
+
+========================= 4 passed, 1 warning in 0.63s =========================
+```
+Un test que pasa no imprime nada de contexto adicional — solo `PASSED` y el 
+resumen final; el detalle (traceback, diff) solo aparece cuando algo falla.
