@@ -27,7 +27,7 @@ flowchart TB
         IdpNavantia["IdP Navantia<br/>SAML/ADFS u OIDC/Azure AD<br/>— protocolo a confirmar"]
     end
 
-    subgraph Backend["Backend FastAPI — monolito modular"]
+    subgraph Backend["Backend FastAPI — monolito modular<br/>servidor de la arquitectura cliente-servidor (RT-CMS-1.2)"]
         Routers["routers/<br/>valida JWT interno"]
         AuthFed["Federación de identidad<br/>verifica aserción de cualquiera<br/>de los 2 IdP, mapea a rol+proyecto"]
         Services["services/<br/>RBAC vía catálogo + ServiLog<br/>+ Workflow + orquesta Publisher"]
@@ -52,8 +52,12 @@ flowchart TB
         Services -.->|"puebla en check-in<br/>RT-SL-2.3"| Indice
     end
 
+    ExistDB[("eXist-db — CANDIDATO REAL<br/>valida/navega el XML fuente de SIR<br/>keys · outputclass · conref/conkeyref<br/>RF-SL-1.3 · RT-SL-1.1 · RT-SL-2.7<br/>NO reemplaza ni convive con el<br/>indice derivado, es upstream de el")]
+    ValidXML -.->|"contrato de tabla N2 +<br/>resolucion keyref/conref del SIR"| ExistDB
+    ExistDB -.->|"upstream, antes de generar<br/>el indice derivado"| Indice
+
     subgraph Busqueda["Busqueda avanzada — copia derivada"]
-        OS["OpenSearch — instancia única<br/>código abierto, RT-CMS-1.2"]
+        OS["OpenSearch — instancia única<br/>código abierto"]
     end
 
     subgraph PublisherBox["Publisher — publicacion desatendida"]
@@ -101,16 +105,21 @@ flowchart TB
     classDef oss stroke:#16A34A,stroke-width:3px
     classDef externo stroke:#64748B,stroke-width:2px,stroke-dasharray: 3 3
     classDef futuro stroke:#8B5CF6,stroke-width:3px,stroke-dasharray: 6 4
+    classDef candidato stroke:#D97706,stroke-width:3px,stroke-dasharray: 6 4
 
     class Dashboard,Routers,AuthFed,Services,ValidXML,Storage,Core,Proyectos,RBACdb,Nuevas,Indice,OS,Cola,Worker,DitaOT oss
     class XMetaL,Compositor,RenderX externo
     class LLM,OSCluster futuro
+    class ExistDB candidato
 ```
 
 ### Leyenda del marcado visual
 
 RT-CMS-1.2 exige explícitamente *"Arquitectura cliente-servidor y código 
-abierto"*. El marcado por color evalúa **solo la plataforma que este 
+abierto"*. Es un requisito **general sobre la forma del sistema completo**, 
+no una instrucción sobre cómo se conecta ningún cliente concreto — se 
+desarrolla en detalle en "Backend FastAPI — monolito modular" más abajo. El 
+marcado por color de este diagrama evalúa **solo la plataforma que este 
 proyecto construye o licencia** — no las herramientas externas de Navantia 
 con las que simplemente se integra.
 
@@ -126,22 +135,48 @@ con las que simplemente se integra.
   *"en transición"* en el propio docx: candidato a retirarse cuando el 
   compositor S80 lo sustituya por completo, no una pieza a mantener a 
   largo plazo.
-- **Borde violeta discontinuo — pieza opcional/futura, dibujada pero no 
-  activa en esta versión**: el **LLM local** y el **clúster de OpenSearch** 
-  (ver más abajo) — mismo tratamiento visual que recibió eXist-db en la 
-  arquitectura del curso: presente en el diagrama y justificada, sin ser 
-  parte del alcance actual.
+- **Borde violeta discontinuo — pieza opcional/futura, sin caso de uso 
+  concreto todavía**: el **LLM local** y el **clúster de OpenSearch** (ver 
+  más abajo) — dibujadas y justificadas, sin ser parte del alcance actual.
+- **Borde ámbar discontinuo — candidato real, con caso de uso concreto ya 
+  identificado en los requisitos, pendiente de decisión de adopción**: 
+  **eXist-db** (ver "Índice de extracción de ServiLog" más abajo) — a 
+  diferencia del violeta, esta pieza ya tiene evidencia textual del docx 
+  que la sustenta, no es solo un patrón heredado del curso sin caso de uso 
+  propio.
 
 ## Justificación por pieza
 
-### Backend FastAPI — monolito modular
+### Backend FastAPI — monolito modular, arquitectura cliente-servidor (RT-CMS-1.2)
 
 Reutilizado tal cual del curso: `fase-4-arquitectura-sistemas/
 2-ejercicio_arquitectura_ccms.md` ya defendió, con cita al checkpoint de 
 `fase-1-backend/README.md`, que un CCMS de este tamaño no necesita 
 microservicios — el criterio (ciclo de despliegue, escalado y equipo 
-distintos) sigue aplicando aquí sin cambios. RT-CMS-1.2 ("arquitectura 
-cliente-servidor") es compatible directamente con este patrón.
+distintos) sigue aplicando aquí sin cambios.
+
+**Aquí es donde se cumple RT-CMS-1.2, y solo aquí — a nivel de sistema 
+completo, no de ninguna pieza concreta.** RT-CMS-1.2 tiene dos cláusulas 
+independientes:
+
+- **"Arquitectura cliente-servidor"**: se cumple por construcción del 
+  sistema en su conjunto — el backend FastAPI es el servidor único; el 
+  Dashboard React, XMetaL (y en el futuro Oxygen) son los clientes que lo 
+  consumen vía REST. No es una propiedad de ningún cliente individual ni 
+  de cómo se lanza cada uno.
+- **"Código abierto"**: se cumple de forma agregada por las piezas que 
+  este proyecto construye o licencia (backend, base de datos, motor de 
+  búsqueda, dashboard, tooling XML — ver leyenda del diagrama), no por 
+  ninguna pieza aislada.
+
+**Importante, para no repetir la confusión**: la decisión de CÓMO se 
+conecta un cliente concreto (p. ej. XMetaL vía `smartcms://`, vía un 
+agente local, o vía WebDAV+LOCK como plan B) es una **decisión de 
+integración de editor** — gobernada por RF-CMS-2.6 y RT-CMS-1.8 (ver 
+"Integración con XMetaL" más abajo) — completamente independiente de si 
+el sistema, como un todo, es cliente-servidor o de código abierto. Esa 
+propiedad ya está garantizada por este apartado, se conecte XMetaL como 
+se conecte.
 
 ### PostgreSQL — esquema base + extensiones de este proyecto
 
@@ -183,6 +218,51 @@ que Elasticsearch en el curso — pero el propio requisito (RT-SL-2.1:
 *"alojado en la base de datos del propio CCMS"*) exige que viva **en el 
 mismo PostgreSQL**, no en un motor externo. Por eso, a diferencia de 
 Elasticsearch/OpenSearch, no aparece como servicio aparte en el diagrama.
+
+**eXist-db: candidato real para lo que alimenta ese índice, no para el 
+índice en sí.** Los objetos SIR (warning, caution, part, tool, lubricant…) 
+no son datos planos — viven como XML DITA con semántica estructural propia, 
+confirmado por tres requisitos concretos del docx:
+
+- **RF-SL-1.3**: *"Reutilización por conref/conkeyref a nivel de dato, fila 
+  o tabla desde los ditamaps de dosier."* `conref`/`conkeyref` son 
+  mecanismos que solo operan sobre elementos XML — confirma que el SIR es 
+  contenido estructurado, no un registro plano.
+- **RT-SL-1.1**: *"ServiLog se implementa con los objetos DITA reutilizables 
+  (mismo storage y versionado que el resto)."* — explícito: los objetos SIR 
+  son objetos DITA como cualquier topic.
+- **RT-SL-2.7**: *"ningún valor del índice puede depender de heurísticas 
+  sobre el texto visible del documento... Todo dato indexado procede de una 
+  key, de un atributo o de un identificador semántico."* — el índice debe 
+  derivarse de construcciones estructurales XML (keys, atributos, 
+  identificadores semánticos como `part-001-pn`), no de texto plano.
+
+Es exactamente el mismo tipo de necesidad que `fase-2-bases-de-datos/
+4-ejercicio_xmlBD.md` y la corrección de la Pregunta 3 de la ronda de 
+abogado del diablo en `fase-4-arquitectura-sistemas/
+2-ejercicio_arquitectura_ccms.md` identificaron como la justificación real 
+de eXist-db — controlar y validar keys/referencias cruzadas DITA, navegar 
+la estructura para detectar enlaces rotos — solo que allí era un caso de 
+uso hipotético, y aquí es un requisito textual concreto: validar el 
+contrato de tabla N2 (outputclass + identificadores semánticos de fila/
+celda) y resolver keyref/conref del SIR antes de que esos valores se 
+vuelquen al índice relacional.
+
+**El matiz que fija dónde va la flecha en el diagrama**: RT-SL-2.1 ya deja 
+cerrado que el índice derivado en sí vive en PostgreSQL — eso no cambia. 
+eXist-db no sustituye esa tabla ni convive con ella como almacén alternativo 
+— es la pieza que **valida y navega el XML fuente de los objetos SIR aguas 
+arriba**, antes de que `Services` genere el índice hacia PostgreSQL en el 
+check-in. Por eso, en el diagrama, la flecha de eXist-db apunta hacia el 
+proceso de generación del índice (`ExistDB -.-> Indice`), nunca al revés, y 
+`ValidXML` (donde ya vive la validación DTD/XSD/Schematron/keyref/conref/
+href) es quien la invoca para el caso específico del contrato de tabla SIR.
+
+Queda marcada como **candidato real, no activa todavía** (borde ámbar en el 
+diagrama): la necesidad está identificada y justificada con texto concreto 
+del docx, pero activarla es una decisión de implementación pendiente, igual 
+que en el curso — no se añade complejidad sin que el caso de uso esté 
+claro, y aquí ya lo está.
 
 ### OpenSearch (no Elasticsearch) — búsqueda avanzada
 
@@ -239,6 +319,13 @@ editor XML durante la autoría como, después, desde el propio CCMS en el
 check-in. Un check-in inválido se rechaza sin crear versión (RF-CMS-4.3).
 
 ### Integración con XMetaL — más específica que el patrón genérico del curso
+
+**Nota previa**: esta sección decide *cómo* se lanza y se comunica XMetaL 
+con el backend — una decisión de integración de editor. No tiene relación 
+con RT-CMS-1.2 (arquitectura cliente-servidor y código abierto), que ya 
+queda satisfecho a nivel de sistema completo en "Backend FastAPI — 
+monolito modular" más arriba, independientemente de qué mecanismo se elija 
+aquí.
 
 El curso proponía un "agente local" (aplicación auxiliar corriendo en 
 segundo plano, con su propio servidor HTTP local) para lanzar cualquier 
@@ -350,7 +437,7 @@ que atraviesa todas las piezas de datos.
 | Versiones, baselines y ramas (+ diff) | `versiones`, `baselines`, `baseline_version` (Postgres) |
 | Gestor de tareas (asignación/reclamación, workflow, stepper) | `tareas`, `objeto_estado`, `estados` (Postgres) + RBAC |
 | Publicación (Publisher, cola de jobs) | `PublisherBox` (cola en BD + worker + DITA-OT) |
-| ServiLog (catálogo SIR, listados, trazabilidad, historial) | `Services` (ServiLog) + `objetos_contenido` + Índice de extracción |
+| ServiLog (catálogo SIR, listados, trazabilidad, historial) | `Services` (ServiLog) + `objetos_contenido` + Índice de extracción (+ eXist-db, candidato, upstream) |
 | Búsqueda avanzada (facetas + relevancia) | OpenSearch |
 | Reports & integridad (enlaces rotos, huérfanos, cobertura) | `ValidXML` + Índice de extracción |
 | Administración (usuarios/roles/auditoría/config estándar) | Catálogo RBAC + `auditoria` (Postgres) |
