@@ -1,0 +1,2 @@
+# fastapi, sqlalchemy, psycopg2-binary, python-dotenv, python3-saml, authlib, pytest, httpx
+# (pendiente de fijar versiones exactas)
