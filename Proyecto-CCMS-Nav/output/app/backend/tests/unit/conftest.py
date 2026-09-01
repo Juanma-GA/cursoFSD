@@ -1,0 +1,1 @@
+# Fixtures propias de unit/: storage/ mockeado (no toca SQLite ni ninguna base de datos real) — para probar la lógica de services/ en aislamiento total, sin el coste ni el acoplamiento de una petición HTTP real.

@@ -1,0 +1,1 @@
+# Fixture `client`: TestClient(app) construido sobre el engine SQLite en memoria de la conftest.py raíz — mismo patrón que fase-5-herramientas-vibe-coder/api/test_topics.py (monkeypatch de SessionLocal antes de cada test), adaptado a que aquí storage/ son 13 módulos, no uno.

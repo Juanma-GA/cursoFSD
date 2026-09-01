@@ -1,0 +1,1 @@
+# Tests unitarios de comprobación de permisos rol→operación leyendo el catálogo — con storage/ mockeado. Pieza compartida con security/test_rbac_permisos.py, que la prueba end-to-end en vez de en aislamiento.

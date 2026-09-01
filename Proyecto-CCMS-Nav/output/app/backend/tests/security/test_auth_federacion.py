@@ -1,0 +1,1 @@
+# Verifica que AuthFed (auth/federacion.py) normaliza correctamente una aserción de CUALQUIERA de los 2 IdP (ATEXIS/Keycloak OIDC, Navantia SAML u OIDC) a un JWT interno único con rol y proyecto, y que rechaza una aserción no reconocida o de un IdP no dado de alta.

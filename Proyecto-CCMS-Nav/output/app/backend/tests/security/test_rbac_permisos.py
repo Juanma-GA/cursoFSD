@@ -1,0 +1,1 @@
+# Verifica que la dependencia RBAC bloquea una operación no permitida por el rol del usuario (ej. un rol sin permiso de 'Publicar' intentando publicar) leyendo el catálogo roles/permisos real (decisión C) — nunca una constante hardcodeada — y que un cambio en el catálogo cambia el resultado sin tocar código.

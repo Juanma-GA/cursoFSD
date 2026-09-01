@@ -403,3 +403,82 @@ variables ya declarados como marcadores — pero ninguno es funcional
 todavía (sin puertos mapeados, sin variables de entorno reales resueltas, 
 sin volúmenes, y sin `.env` real con credenciales). Levantar el entorno de 
 desarrollo de verdad sigue pendiente de completar esa configuración.
+
+## `backend/tests/` — por qué no es el patrón flat de la Fase 5
+
+`fase-5-herramientas-vibe-coder/api/test_topics.py` bastaba con un único 
+archivo: una API con 3 endpoints y un solo servicio no necesita más. Aquí 
+hay 16 servicios, una capa transversal de seguridad (aislamiento por 
+proyecto + RBAC + JWT) que ningún test de la Fase 5 tenía que probar, y 
+autenticación federada con dos IdP — un único archivo se volvería 
+inmanejable y, peor, mezclaría "¿funciona la lógica de este servicio?" con 
+"¿está bloqueado el acceso indebido?" en el mismo sitio, dificultando ver 
+de un vistazo si la pieza de seguridad está cubierta.
+
+Por eso `tests/` se divide en tres categorías, no dos ni una:
+
+```
+tests/
+├── conftest.py          # fixtures compartidas por toda la suite
+├── pytest.ini
+├── unit/                # lógica de negocio en aislamiento — storage/ mockeado
+│   ├── services/         # un archivo por servicio, 1:1 con backend/services/
+│   └── validacion/
+├── integration/          # ciclo completo request→router→service→storage→SQLite
+│   └── (un archivo por router, 1:1 con backend/routers/)
+└── security/              # la capa transversal, probada aparte y con evidencia real
+```
+
+- **`unit/`**: prueba `services/` con `storage/` mockeado — sin tocar 
+  ninguna base de datos, ni siquiera SQLite. Apropiado para lógica que no 
+  depende de cómo se guardan los datos: la máquina de estados de workflow, 
+  las reglas de RBAC, el cálculo de campos derivados del índice de 
+  extracción. Existe como capa separada por dos razones concretas: 
+  **rapidez** (sin engine SQLite que crear ni tablas que poblar en cada 
+  test, es la capa que se ejecuta en segundos y por tanto la que se corre 
+  constantemente mientras se escribe lógica de negocio) y **no depender de 
+  infraestructura** (no necesita que `Base.metadata.create_all()` ni el 
+  monkeypatch de `SessionLocal` de `conftest.py` funcionen para dar 
+  señal — puede ejecutarse aunque la capa de persistencia esté a medio 
+  construir). Un archivo por servicio, mismo nombre que en 
+  `backend/services/` — misma razón de trazabilidad 1:1 ya aplicada a 
+  `storage/`/`models/`/`schemas/` en el resto de este documento.
+- **`integration/`**: es el patrón de la Fase 5, adaptado — `TestClient` + 
+  SQLite en memoria + `monkeypatch` de `SessionLocal`, pero monkeypateando 
+  **cada uno de los 13 módulos de `storage/`** (allí solo existía 
+  `memory_store.py`) en vez de uno solo. Un archivo por router, prueba el 
+  ciclo completo (HTTP → router → service → storage → SQLite) tal como lo 
+  haría un cliente real.
+- **`security/`**: **la categoría más importante de las tres**, pedida 
+  explícitamente porque el aislamiento transversal (`core/proyecto_context.py`, 
+  `core/seguridad.py`) no está ligado a ningún dominio concreto — mezclarlo 
+  dentro de `test_tareas_api.py` o `test_servilog_api.py` lo dejaría 
+  parcialmente probado en unos sitios sí y en otros no, sin que quedara 
+  nunca claro si de verdad está cubierto en todas partes. Aquí se prueba 
+  una vez, a fondo, con evidencia real y no solo documentada:
+  - `test_proyecto_context.py`: **la pieza más crítica de toda la suite**. 
+    Prueba específicamente el caso de un usuario **autenticado y con 
+    permiso válido**, pero del proyecto A, intentando acceder a datos del 
+    proyecto B — no el caso trivial de "sin autenticación, rechazado". Es 
+    ese escenario concreto el que de verdad demuestra si el aislamiento 
+    transversal funciona, porque un fallo ahí es **silencioso**: no un 
+    error visible en pantalla, sino una fuga real de datos entre Navantia 
+    y el uso interno de ATEXIS, indistinguible de un funcionamiento 
+    correcto hasta que alguien audita el contenido devuelto. Probado a 
+    través de varios routers distintos, no solo uno, para confirmar que la 
+    dependencia es transversal de verdad y no una comprobación puntual en 
+    un único endpoint.
+  - `test_seguridad_jwt.py`: petición sin JWT, con JWT expirado, o con JWT 
+    manipulado — rechazadas antes de ejecutar ninguna lógica de negocio.
+  - `test_rbac_permisos.py`: una operación no permitida por el rol se 
+    bloquea leyendo el catálogo real (decisión C), no una constante.
+  - `test_auth_federacion.py`: `AuthFed` normaliza correctamente una 
+    aserción de cualquiera de los 2 IdP, y rechaza una no reconocida.
+
+**Lo que falta**: como el resto del proyecto en esta fase, son archivos 
+con un comentario, sin lógica de test real todavía — y sin 
+`test_exist_db_client.py`, porque eXist-db sigue siendo candidato sin 
+activar (no tiene sentido testear una integración que aún no existe). El 
+workflow de GitHub Actions para CI (ver `fase-5-herramientas-vibe-coder/
+README.md` para el patrón ya practicado) queda explícitamente para cuando 
+haya al menos un test real que ejecutar — no generado en esta revisión.
