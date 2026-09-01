@@ -246,6 +246,36 @@ están en la barra de navegación pero sí son pantallas reales del mockup.
 cada página, sin adelantar decisiones de diseño de componentes que no se 
 han tomado todavía.
 
+### Qué construye cada subcarpeta del frontend
+
+- **`pages/`**: cada archivo corresponde a una pantalla completa del 
+  mockup (Inicio, Proyectos, Navegador, Publisher, ServiLog...) — el nivel 
+  más alto, lo que el usuario ve al navegar a una URL concreta.
+- **`components/`**: piezas de interfaz reutilizadas en más de una pantalla 
+  (Topbar, Sidebar, DataTable, StatusBadge). Deliberadamente pequeño: cada 
+  página construye su propio contenido específico, sin forzar una librería 
+  de componentes completa que aún no se ha diseñado — evita construir para 
+  necesidades hipotéticas, mismo criterio ya aplicado en otras partes del 
+  proyecto.
+- **`services/`**: NOTA — mismo nombre que el `services/` del backend, 
+  pero significado distinto. Aquí es el equivalente de api.js de la Fase 3 
+  del curso: la capa que centraliza las llamadas fetch() hacia el backend 
+  — no lógica de negocio, solo "cómo hablar con la API".
+- **`stores/`**: pieza nueva respecto al curso (donde App.jsx guardaba 
+  estado directamente con useState). Un store es un lugar centralizado 
+  para estado que varias páginas necesitan compartir — ej. quién es el 
+  usuario logueado, o en qué proyecto/cliente está trabajando ahora mismo 
+  (el aislamiento por proyecto es transversal también en el frontend, no 
+  solo en el backend). Cuando el estado deja de ser propio de una sola 
+  página, useState dentro de un componente ya no basta.
+- **`hooks/`**: funciones reutilizables que encapsulan lógica de React 
+  repetida entre páginas (ej. "cargar datos con loading/error" — mismo 
+  patrón visto en App.jsx con useEffect/cargando/error de la Fase 3, ahora 
+  extraído para no repetirlo en cada página que lo necesite).
+- **`types/`**: definiciones de la forma de los datos en el frontend 
+  (TypeScript) — equivalente, del lado cliente, a lo que schemas/ es del 
+  lado backend.
+
 ## Lo que NO se ha decidido en esta estructura (a propósito)
 
 - No hay carpeta ni módulo para el LLM local ni para el clúster de 
