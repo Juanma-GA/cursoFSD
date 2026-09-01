@@ -25,6 +25,53 @@ migración (Fase 1 → Fase 2 → Fase 3), que routers y services no necesitan
 tocarse cuando cambia la capa de almacenamiento — es el patrón que este 
 proyecto reutiliza explícitamente, según pidió el encargo.
 
+## Aclaración: diferencia entre models/, schemas/ y storage/
+
+**`models/` — cómo se ven los datos por dentro de la base de datos.** Son 
+las clases SQLAlchemy (ej. ObjetoContenido, Revision, Version de la Fase 2 
+del curso) que definen columnas, tipos, claves primarias y foráneas. 
+Responden a la pregunta: "¿qué forma tiene una fila de la tabla revisiones 
+en PostgreSQL?". No tienen ninguna lógica — son solo la traducción entre 
+tablas SQL y clases Python, tal como se vio con el ORM.
+
+**`schemas/` — cómo se ven los datos por fuera, cruzando la red.** Son las 
+clases Pydantic (ej. TopicCreate/TopicResponse de la Fase 1 del curso) que 
+definen qué forma debe tener el JSON que entra y sale por la API. Responden 
+a la pregunta: "¿qué campos se esperan recibir en un POST /topics, y qué 
+campos se devuelven en la respuesta?". Son distintos de models/ aunque a 
+veces se parezcan mucho: el contrato público de la API no tiene por qué 
+coincidir exactamente con cómo se guarda internamente (ej. TopicCreate no 
+lleva id porque aún no existe; Revision en la BD sí tiene columnas que 
+nunca se expondrían directamente en un JSON, como claves internas de 
+auditoría).
+
+**`storage/` — quién sabe hablar de verdad con la base de datos.** Es la 
+capa que usa models/ para ejecutar consultas reales (SELECT, INSERT, 
+UPDATE) contra PostgreSQL — recuerda memory_store.py en la Fase 1, y su 
+evolución a hablar con PostgreSQL en la Fase 2 sin que routers/services 
+tuvieran que cambiar una línea. Responde a la pregunta: "¿cómo se consigue, 
+guarda o actualiza estos datos, sea cual sea el motor detrás?".
+
+### La cadena completa de una petición
+
+1. Llega un POST /topics → schemas/ valida que el JSON tiene la forma 
+   esperada (TopicCreate)
+2. routers/ pasa esos datos a services/
+3. services/ decide la lógica de negocio (permisos, aislamiento por 
+   proyecto/cliente) y llama a storage/
+4. storage/ traduce eso a una operación real usando models/ (la clase 
+   SQLAlchemy correspondiente), y la ejecuta contra PostgreSQL
+5. La respuesta vuelve por el mismo camino, y schemas/ (TopicResponse en 
+   este caso) define qué forma tiene el JSON de vuelta
+
+### Resumen en una frase cada una
+
+- `models/` = la forma de los datos DENTRO de la base de datos (SQLAlchemy)
+- `schemas/` = la forma de los datos EN LA API (Pydantic, lo que viaja por 
+  HTTP)
+- `storage/` = el código que CONECTA ambas cosas, ejecutando las 
+  operaciones reales
+
 ## `backend/` — capas por responsabilidad
 
 ### `routers/` — traducción HTTP, sin lógica
