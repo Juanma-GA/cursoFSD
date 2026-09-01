@@ -446,6 +446,40 @@ triviales, y se descarta como método principal por las mismas razones ya
 documentadas en la comparación PostgreSQL vs eXist-db del curso (no 
 entiende estructura, no distingue atributo de texto, no valida nada).
 
+#### Nota de decisión: por qué la persistencia dual NO se generaliza a todo el contenido
+
+Se consideró explícitamente activar persistencia dual (PostgreSQL + 
+eXist-db) desde el principio para TODO el contenido, no solo objetos SIR, 
+razonando que "seguro que aparecerán necesidades futuras". Se descartó, por 
+las mismas razones ya aplicadas en el checkpoint de microservicios y en la 
+corrección original de la Pregunta 3 del abogado del diablo (Fase 4 del 
+curso): una necesidad hipotética futura no es lo mismo que una necesidad 
+real y medida hoy.
+
+Coste real de generalizar la persistencia dual a todo el contenido:
+- Cada escritura duplica trabajo y puntos de fallo: qué pasa si PostgreSQL 
+  escribe bien pero eXist-db falla (o viceversa) — desincronización o 
+  rollback, ambas caras de una complejidad operativa nueva.
+- Requeriría escribir reglas de validación DITA específicas para contenido 
+  que hoy no tiene ningún caso de uso concreto que las necesite — ni el 
+  mockup ni el docx piden esto para topics/ditamaps normales, solo para 
+  objetos SIR (RF-SL-1.3, RT-SL-1.1, RT-SL-2.7).
+
+Lo que SÍ está resuelto por el diseño actual, sin pagar ese coste: el flujo 
+de 3 pasos (validación síncrona → persistencia dual si corresponde) es una 
+PLANTILLA ya resuelta, fácil de extender cuando aparezca una necesidad real 
+y concreta para otro tipo de dato. Extender no es gratis ni automático — 
+sigue requiriendo (1) escribir las reglas de validación específicas del 
+tipo de dato nuevo, y (2) migrar explícitamente los datos que ya existían 
+en PostgreSQL antes de la decisión, porque el flujo solo actúa hacia 
+adelante (en cada nuevo check-in), no retroactivamente.
+
+Regla de decisión para cuando aparezca un caso nuevo: ¿este dato tiene 
+estructura XML con keys/referencias que hay que validar o navegar (como 
+SIR)? → candidato a extender a eXist-db, evaluando caso por caso. ¿Es 
+contenido/metadatos normales sin esa necesidad estructural? → solo 
+PostgreSQL, sin activar persistencia dual por defecto.
+
 ### PostgreSQL — decisión activa y aplicable ya
 
 - **Desarrollo/pruebas**: contenedor Docker, mismo patrón ya practicado en 
