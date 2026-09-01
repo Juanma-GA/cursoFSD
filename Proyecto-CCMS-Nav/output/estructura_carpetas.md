@@ -325,11 +325,15 @@ de los dos tiene carpeta ni módulo en esta estructura, a propósito.
 
 Todo lo documentado hasta aquí es **código** (`routers/`, `services/`, 
 `storage/`, `models/`) — pero el código necesita algo corriendo detrás para 
-conectarse. Esa infraestructura física **no existe todavía** en esta 
-estructura (no hay `docker-compose.yml` con servicios definidos, ni 
-instalación nativa documentada) — lo que sigue es la decisión de **cómo** 
-se desplegará cada base de datos cuando llegue el momento, no la 
-infraestructura ya construida.
+conectarse. Esa infraestructura física **empieza a existir como marcador**, 
+no como algo funcional todavía: `docker-compose.yml` ya declara los tres 
+servicios de base de datos (imagen base únicamente, sin puertos, variables 
+de entorno reales ni volúmenes) y `backend/.env.example` ya lista las 
+variables que hará falta rellenar — pero nada de esto es todavía 
+infraestructura levantable: no hay `.env` real, no hay configuración 
+funcional en `docker-compose.yml`, y no hay instalación nativa documentada 
+para producción. Lo que sigue es la decisión de **cómo** se desplegará cada 
+base de datos cuando llegue el momento de completar esos marcadores.
 
 ### PostgreSQL — decisión activa y aplicable ya
 
@@ -339,8 +343,12 @@ infraestructura ya construida.
   `fase-5-herramientas-vibe-coder` movió las credenciales de `database.py` 
   a un `.env` fuera de Git (con `.env.example` como plantilla pública). 
   `backend/database.py` de esta estructura ya está pensado para leer esas 
-  credenciales de un `.env` (mismo patrón), aunque el `.env`, el 
-  `.env.example` y el contenedor en sí no existen aún.
+  credenciales de un `.env` (mismo patrón). **Ya existen** el servicio 
+  `postgres` en `docker-compose.yml` (imagen `postgres:16`, sin 
+  configuración funcional) y `backend/.env.example` (con 
+  `POSTGRES_HOST`/`PORT`/`USER`/`PASSWORD`/`DB`, valores de ejemplo 
+  genéricos) — **no existe todavía** el `.env` real con credenciales, ni 
+  puertos/volúmenes reales en el `docker-compose.yml`.
 - **Producción**: instalación **nativa** en el servidor, no en contenedor 
   — decisión explícita del proyecto, no el valor por defecto del curso (que 
   usaba Docker sin más). PostgreSQL ya está en uso en este proyecto, así 
@@ -359,7 +367,12 @@ activo todavía", sin lógica real ni conexión — confirmado explícitamente:
 sigue como candidato sin activar. La implementación real sigue pendiente de 
 confirmar si hace falta de verdad.
 
-- **Desarrollo/pruebas**: contenedor Docker, mismo patrón que PostgreSQL.
+- **Desarrollo/pruebas**: contenedor Docker, mismo patrón que PostgreSQL. 
+  **Ya existe** el servicio `existdb` en `docker-compose.yml` (imagen 
+  `existdb/existdb:6`), marcado explícitamente con el comentario 
+  `# candidato, no activo` junto a su bloque — sin puertos, variables de 
+  entorno ni volúmenes reales, y sin ninguna variable en 
+  `backend/.env.example` todavía (no hace falta hasta que se active).
 - **Producción**: instalación **nativa** en el servidor, no en contenedor 
   — misma razón técnica que PostgreSQL (gestión de memoria/E·S optimizada 
   fuera de una capa de contenedor adicional), por ser también una base de 
@@ -371,7 +384,11 @@ Se preguntó explícitamente en vez de asumir: **nativo en producción**,
 igual que PostgreSQL y eXist-db — criterio uniforme para las tres bases de 
 datos, no solo para las dos relacionales/XML.
 
-- **Desarrollo/pruebas**: contenedor Docker, mismo patrón que las otras dos.
+- **Desarrollo/pruebas**: contenedor Docker, mismo patrón que las otras dos. 
+  **Ya existen** el servicio `opensearch` en `docker-compose.yml` (imagen 
+  `opensearchproject/opensearch:2`) y `OPENSEARCH_HOST`/`OPENSEARCH_PORT` 
+  en `backend/.env.example` — sin puertos, credenciales ni volúmenes reales 
+  todavía.
 - **Producción**: instalación **nativa** en el servidor, no en contenedor 
   — misma razón técnica (rendimiento optimizado directamente sobre el 
   sistema operativo). Se descarta mantener Docker/Kubernetes en producción 
@@ -380,8 +397,9 @@ datos, no solo para las dos relacionales/XML.
   preferirse por facilidad de gestión — decisión consciente, no por 
   defecto.
 
-**Lo que falta generar en cualquier caso**: un `docker-compose.yml` (o 
-equivalente) en la raíz de `app/` que orqueste los contenedores de 
-desarrollo — hoy `docker-compose.yml` existe como archivo pero solo con un 
-comentario `# TODO`, sin ningún servicio definido. Queda marcado como 
-pendiente explícito, no generado en esta revisión.
+**Estado real de `docker-compose.yml` y `backend/.env.example` tras este 
+cambio**: ambos archivos existen físicamente, con los tres servicios/
+variables ya declarados como marcadores — pero ninguno es funcional 
+todavía (sin puertos mapeados, sin variables de entorno reales resueltas, 
+sin volúmenes, y sin `.env` real con credenciales). Levantar el entorno de 
+desarrollo de verdad sigue pendiente de completar esa configuración.

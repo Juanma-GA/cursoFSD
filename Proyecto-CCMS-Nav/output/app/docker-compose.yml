@@ -1,1 +1,21 @@
 # TODO: servicios (backend, frontend, postgres, opensearch, worker) — pendiente de definir
+# Marcador visual de qué se planea levantar en desarrollo — ver
+# ../estructura_carpetas.md ("Infraestructura física: dónde viven las bases de datos").
+# Sin configuración funcional real todavía: sin puertos mapeados, sin
+# variables de entorno reales, sin volúmenes.
+
+services:
+  postgres:
+    image: postgres:16
+    # TODO: puertos, variables de entorno (ver backend/.env.example), volúmenes
+
+  opensearch:
+    image: opensearchproject/opensearch:2
+    # TODO: puertos, variables de entorno, volúmenes
+    # confirmado nativo en producción (ver estructura_carpetas.md) — este
+    # servicio es solo para desarrollo/pruebas
+
+  existdb:
+    image: existdb/existdb:6
+    # candidato, no activo
+    # TODO: puertos, variables de entorno, volúmenes — solo si se activa en el futuro
