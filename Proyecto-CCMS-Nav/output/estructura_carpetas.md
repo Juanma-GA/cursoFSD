@@ -171,6 +171,50 @@ cumple el mismo papel para JWT+RBAC (cada endpoint los necesita, según
 `rules/atexis-hard-rules.md` de aacf). `config.py` cumple HR0/HR8 de aacf 
 ("nada hardcodeado, todo configurable").
 
+### Aclaración: por qué "transversal" significa "estructuralmente 
+imposible de saltarse", no "una norma a recordar"
+
+**El riesgo del enfoque frágil**: si cada service individual (proyectos, 
+tareas, publicación, ServiLog, etc.) tuviera, dentro de su propio código, 
+una línea que filtra manualmente por proyecto_id o comprueba permisos, 
+bastaría que UN solo servicio lo olvide para que un dato de un proyecto 
+Navantia se filtre hacia una consulta de un proyecto interno ATEXIS, o 
+viceversa — el aislamiento dependería de que cada desarrollador se acuerde 
+de aplicarlo en cada sitio, en cada endpoint nuevo que se añada en el 
+futuro.
+
+**El enfoque robusto que implementa core/**: `proyecto_context.py` y 
+`seguridad.py` son dependencias de FastAPI (Depends) que se inyectan ANTES 
+de que cualquier router ejecute su lógica de negocio:
+- `proyecto_context.py` extrae de qué proyecto/cliente habla la petición 
+  (del JWT o de la URL), y todas las consultas que pasen por storage/ a 
+  partir de ahí quedan automáticamente acotadas a ese contexto — sin que el 
+  desarrollador de cada servicio tenga que acordarse de nada.
+- `seguridad.py` cumple el mismo papel para JWT+RBAC: ningún router puede 
+  ejecutarse sin pasar primero por la comprobación de permiso, verificada 
+  en un único sitio en vez de repetida (y potencialmente mal repetida) en 
+  cada uno de los 16 servicios.
+
+Es la diferencia entre "una norma que hay que recordar" y "una regla que el 
+sistema hace estructuralmente imposible saltarse".
+
+**Por qué config.py es de naturaleza distinta, aunque viva en la misma 
+carpeta**: no intercepta peticiones como las dos piezas anteriores — es el 
+único lugar donde viven valores que cambian según el entorno (URLs de los 
+dos IdPs, credenciales de BD, endpoints de OpenSearch), siguiendo el mismo 
+patrón .env practicado en la Fase 5 del curso. Está en core/ porque, como 
+las otras dos, es algo que todo el resto del sistema necesita consultar sin 
+pertenecer a ningún servicio concreto.
+
+### Pendiente de verificar antes de escribir lógica real
+
+Confirmar con un ejemplo de código (aunque sea solo la firma de una 
+función, no la lógica completa) cómo un router típico (ej. el de tareas) 
+importaría y usaría proyecto_context.py y seguridad.py como dependencias de 
+FastAPI — para asegurar que la estructura hace estructuralmente imposible 
+que un router se salte estas comprobaciones, y que esto no depende de que 
+cada desarrollador se acuerde de añadirlas.
+
 ### `validacion/` — ampliada frente al curso, con eXist-db como candidato
 
 Cuatro módulos, no uno: DTD/XSD 1.3, Schematron, integridad referencial 
