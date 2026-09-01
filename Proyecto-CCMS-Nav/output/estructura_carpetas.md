@@ -94,9 +94,12 @@ simetría 1:1 con `routers/` salvo excepciones justificadas:
 - **`contenido_service.py`** / **`bookmap_service.py`**: separados porque 
   el mockup los trata como pantallas distintas (Navegador vs. Editor de 
   bookmap) con acciones distintas (consulta/CRUD vs. reordenar estructura).
-- **`checkout_service.py`**: check-out/check-in — la pieza que habla con 
-  el mecanismo `smartcms://` documentado en "Integración con XMetaL" de 
-  `solucion_arquitectura_ccms.md`.
+- **`checkout_service.py`**: check-out/check-in — la pieza que atiende la 
+  llamada REST/OpenAPI que XMetaL hace tras abrirse (documentado en 
+  "Integración con XMetaL" de `solucion_arquitectura_ccms.md`). No tiene 
+  relación directa con `smartcms://` en sí: ese protocolo es solo el 
+  mecanismo de lanzamiento del lado cliente (SO → XMetaL), anterior a 
+  cualquier llamada al backend.
 - **`versiones_service.py`**: versiones/baselines/diff.
 - **`tareas_service.py`** / **`workflow_service.py`**: separados porque 
   son conceptos distintos en el esquema — `tareas` agrupa objetos con 
@@ -130,10 +133,24 @@ simetría 1:1 con `routers/` salvo excepciones justificadas:
 
 Un módulo de storage por agregado de datos, replicando el patrón del curso: 
 `services/` nunca importa SQLAlchemy directamente, solo llama a `storage/`. 
-La consulta de OpenSearch **no** tiene módulo de storage propio — vive 
-directamente en `services/busqueda_service.py`, porque OpenSearch mismo es 
-el "storage" en ese caso (copia derivada, no hay una capa Postgres que 
-envolver ahí).
+No es una simetría 1:1 estricta con los 16 servicios — son **13 módulos**: 
+`admin_storage.py`, `auditoria_storage.py`, `bookmap_storage.py`, 
+`comentarios_storage.py`, `contenido_storage.py`, 
+`indice_extraccion_storage.py`, `proyectos_storage.py`, 
+`publisher_storage.py`, `rbac_storage.py`, `servilog_storage.py`, 
+`tareas_storage.py`, `versiones_storage.py`, `workflow_storage.py`. Tres 
+servicios no tienen módulo propio:
+- **`busqueda_service.py`**: la consulta de OpenSearch **no** tiene módulo 
+  de storage propio — vive directamente en el servicio, porque OpenSearch 
+  mismo es el "storage" en ese caso (copia derivada, no hay una capa 
+  Postgres que envolver ahí).
+- **`checkout_service.py`**: reutiliza `contenido_storage.py` — el 
+  check-in escribe una nueva revisión sobre el mismo agregado que ya 
+  gestiona `contenido_storage.py` (`objetos_contenido`/`revisiones`), no 
+  hace falta un módulo aparte.
+- **`reports_service.py`**: no es dueño de ningún dato propio (ver 
+  `services/` más arriba) — lee a través de `validacion/` y de 
+  `indice_extraccion_storage.py`, sin necesitar su propio módulo.
 
 ### `models/` — un archivo por agregado, no un único `models.py`
 
@@ -155,10 +172,10 @@ Pieza completamente nueva frente al curso (que solo tenía un IdP).
 `federacion.py` es `AuthFed` del diagrama de arquitectura: normaliza 
 cualquiera de las dos aserciones a un JWT interno único. Los dos adaptadores 
 de Navantia (`idp_navantia_saml.py` / `idp_navantia_oidc.py`) existen ambos, 
-sin decidir todavía cuál se usará — la sección "IdP de Navantia: dos 
-escenarios posibles" de `solucion_arquitectura_ccms.md` documenta ambos 
-caminos en detalle para no bloquear el desarrollo mientras Navantia confirma 
-el protocolo.
+sin decidir todavía cuál se usará — dentro de la sección "SSO federado con 
+dos IdP (decisión B)" de `solucion_arquitectura_ccms.md`, el párrafo "IdP 
+de Navantia: dos escenarios posibles" documenta ambos caminos en detalle 
+para no bloquear el desarrollo mientras Navantia confirma el protocolo.
 
 ### `core/` — piezas transversales, no atadas a un solo recurso
 
@@ -171,8 +188,7 @@ cumple el mismo papel para JWT+RBAC (cada endpoint los necesita, según
 `rules/atexis-hard-rules.md` de aacf). `config.py` cumple HR0/HR8 de aacf 
 ("nada hardcodeado, todo configurable").
 
-### Aclaración: por qué "transversal" significa "estructuralmente 
-imposible de saltarse", no "una norma a recordar"
+### Aclaración: por qué "transversal" significa "estructuralmente imposible de saltarse", no "una norma a recordar"
 
 **El riesgo del enfoque frágil**: si cada service individual (proyectos, 
 tareas, publicación, ServiLog, etc.) tuviera, dentro de su propio código, 
@@ -226,16 +242,11 @@ extracción de ServiLog se deriva de XML DITA con semántica estructural
 propia. Existe como archivo para que la interfaz quede prevista, no para 
 que se implemente ya.
 
-**Corrección de alcance (ver detalle completo en "Infraestructura física" 
-más abajo)**: `exist_db_client.py` no es solo un validador de paso que 
-comprueba el XML al vuelo sin guardar nada — si se activa, persiste 
-también una copia de los objetos SIR como colección XML navegable con 
-XQuery, porque validar sin poder consultar después por etiqueta/key/
-estructura no cubre el caso de uso real que motivó eXist-db (buscar 
-keywords, controlar variables DITA). El alcance es limitado, no "todo o 
-nada": solo los objetos SIR de ServiLog llevarían esa copia; el resto del 
-contenido (topics normales, ditamaps) sigue sin copia en eXist-db, con 
-PostgreSQL como única fuente de verdad.
+**Corrección de alcance**: `exist_db_client.py` no es solo un validador de 
+paso que comprueba el XML al vuelo sin guardar nada — si se activa, 
+también persiste una copia de los objetos SIR, navegable con XQuery. Alcance 
+y flujo completos en "Corrección: eXist-db persiste los objetos SIR, no es 
+solo validación de paso", dentro de "Infraestructura física" más abajo.
 
 ### `worker/` — proceso separado de publicación
 
@@ -306,9 +317,9 @@ código de conexión real a OpenSearch, porque esta fase del proyecto era
 explícitamente "solo estructura, sin lógica de implementación". Eso es 
 distinto de eXist-db: `busqueda_service.py` no lleva ninguna marca de 
 "candidato" porque su activación ya está decidida y solo falta 
-implementarla; `exist_db_client.py` sí lleva la marca "CANDIDATO REAL, no 
-activo todavía" en su propio comentario, porque ahí lo pendiente no es 
-solo escribir el código — es decidir si se activa.
+implementarla; `exist_db_client.py` sí lleva esa marca (ver `validacion/` 
+más arriba), porque ahí lo pendiente no es solo escribir el código — es 
+decidir si se activa.
 
 Lo que **sí** sigue siendo opcional/futuro sin caso de uso activo es 
 únicamente el **clúster con réplicas** de OpenSearch (la ruta de escalado 
@@ -346,8 +357,7 @@ funcional en `docker-compose.yml`, y no hay instalación nativa documentada
 para producción. Lo que sigue es la decisión de **cómo** se desplegará cada 
 base de datos cuando llegue el momento de completar esos marcadores.
 
-### Aclaración importante: "sin desplegar" no significa lo mismo para las 
-tres bases de datos
+### Aclaración importante: "sin desplegar" no significa lo mismo para las tres bases de datos
 
 A las tres les falta la infraestructura física corriendo (contenedor 
 levantado, `.env` real con credenciales) — eso es común a las tres. Pero la 
@@ -356,11 +366,13 @@ similitud termina ahí:
 **PostgreSQL — activo, con código funcionando, solo falta levantarlo 
 físicamente.** `backend/storage/` (los 13 módulos) ya tiene lógica real 
 pensada para hablar con PostgreSQL vía SQLAlchemy. `backend/database.py` ya 
-está preparado para leer credenciales de un `.env`. Los 17 archivos de 
-`integration/` en `tests/` están diseñados para probar el ciclo completo 
-HTTP→router→service→storage→SQLite. Si mañana se levanta el contenedor de 
-PostgreSQL y se crea el `.env` real, el sistema funciona de verdad para 
-todo lo relacionado con PostgreSQL — no falta nada más.
+está preparado para leer credenciales de un `.env`. De los 17 archivos de 
+`integration/` en `tests/`, 15 son tests reales (uno por router) diseñados 
+para probar el ciclo completo HTTP→router→service→storage→SQLite — los 
+otros 2 (`__init__.py`, `conftest.py`) son soporte, sin lógica de test 
+propia. Si mañana se levanta el contenedor de PostgreSQL y se crea el 
+`.env` real, el sistema funciona de verdad para todo lo relacionado con 
+PostgreSQL — no falta nada más.
 
 **eXist-db — candidato, sin ningún código de aplicación todavía.** 
 `exist_db_client.py` no tiene lógica real, solo un comentario. Ningún 
@@ -369,64 +381,19 @@ deliberadamente de la estructura de tests porque no hay nada que probar. A
 diferencia de PostgreSQL, si mañana se levanta el contenedor de eXist-db, 
 **no pasa nada** — porque no existe ningún código que sepa hablar con él 
 todavía. Falta, además de la infraestructura física, todo el código de 
-aplicación: la lógica de `exist_db_client.py` (que, si se activa, no es 
-solo validación de paso — ver corrección de rol más abajo), la llamada 
-desde `validacion/` que resolvería conref/conkeyref, y los tests 
-correspondientes.
+aplicación: la lógica de `exist_db_client.py`, la llamada desde 
+`validacion/` que resolvería conref/conkeyref, y los tests 
+correspondientes. Su rol exacto si se activa —no solo validación de 
+paso— se corrige justo debajo.
 
 **Resumen**: "PostgreSQL sin desplegar" = falta solo el último paso 
 (infraestructura). "eXist-db sin activar" = falta todo (infraestructura Y 
-código de aplicación) — su justificación técnica es sólida (ver sección de 
-justificación de eXist-db más arriba en este documento), pero eso no 
-implica que esté listo para construirse ya. Mismo criterio ya aplicado en 
-el checkpoint de microservicios del curso: una justificación válida no es 
-lo mismo que una necesidad medida y actual.
+código de aplicación) — su justificación técnica es sólida (ver `validacion/` 
+más arriba), pero eso no implica que esté listo para construirse ya. Mismo 
+criterio ya aplicado en el checkpoint de microservicios del curso: una 
+justificación válida no es lo mismo que una necesidad medida y actual.
 
-### PostgreSQL — decisión activa y aplicable ya
-
-- **Desarrollo/pruebas**: contenedor Docker, mismo patrón ya practicado en 
-  el curso — `fase-2-bases-de-datos` lo levantó con 
-  `docker run --name ccms-postgres ...` (ver `1-README.md` de esa fase), y 
-  `fase-5-herramientas-vibe-coder` movió las credenciales de `database.py` 
-  a un `.env` fuera de Git (con `.env.example` como plantilla pública). 
-  `backend/database.py` de esta estructura ya está pensado para leer esas 
-  credenciales de un `.env` (mismo patrón). **Ya existen** el servicio 
-  `postgres` en `docker-compose.yml` (imagen `postgres:16`, sin 
-  configuración funcional) y `backend/.env.example` (con 
-  `POSTGRES_HOST`/`PORT`/`USER`/`PASSWORD`/`DB`, valores de ejemplo 
-  genéricos) — **no existe todavía** el `.env` real con credenciales, ni 
-  puertos/volúmenes reales en el `docker-compose.yml`.
-- **Producción**: instalación **nativa** en el servidor, no en contenedor 
-  — decisión explícita del proyecto, no el valor por defecto del curso (que 
-  usaba Docker sin más). PostgreSQL ya está en uso en este proyecto, así 
-  que esta decisión es aplicable ya, no condicionada a nada.
-- **Razón técnica**: PostgreSQL se beneficia de instalación optimizada 
-  directamente sobre el sistema operativo (gestión de memoria, rendimiento 
-  de E/S) frente a correr dentro de una capa de contenedor adicional en 
-  producción.
-
-### eXist-db — misma decisión de despliegue, pero sigue sin activar
-
-Esto es una decisión de **cómo se desplegaría eXist-db si se activa en el 
-futuro** — no implica activarlo ahora. `exist_db_client.py` sigue siendo 
-exactamente lo que era: un archivo esqueleto marcado "candidato real, no 
-activo todavía", sin lógica real ni conexión — confirmado explícitamente: 
-sigue como candidato sin activar. La implementación real sigue pendiente de 
-confirmar si hace falta de verdad.
-
-- **Desarrollo/pruebas**: contenedor Docker, mismo patrón que PostgreSQL. 
-  **Ya existe** el servicio `existdb` en `docker-compose.yml` (imagen 
-  `existdb/existdb:6`), marcado explícitamente con el comentario 
-  `# candidato, no activo` junto a su bloque — sin puertos, variables de 
-  entorno ni volúmenes reales, y sin ninguna variable en 
-  `backend/.env.example` todavía (no hace falta hasta que se active).
-- **Producción**: instalación **nativa** en el servidor, no en contenedor 
-  — misma razón técnica que PostgreSQL (gestión de memoria/E·S optimizada 
-  fuera de una capa de contenedor adicional), por ser también una base de 
-  datos con ese mismo perfil de carga.
-
-### Corrección: eXist-db persiste los objetos SIR, no es solo validación 
-de paso
+### Corrección: eXist-db persiste los objetos SIR, no es solo validación de paso
 
 Decisión anterior a corregir: "eXist-db valida el XML al vuelo sin guardar 
 ninguna copia". Esa decisión impedía consultar después por etiqueta/key/
@@ -447,9 +414,8 @@ colección de eXist-db se corrompiera, se reconstruye reindexando desde
 PostgreSQL, mismo patrón ya aplicado con OpenSearch.
 
 Esto sigue siendo una corrección de **rol** dentro del mismo estatus de 
-candidato: eXist-db no se activa por esto — sigue "candidato real, no 
-activo todavía" (ver más arriba) — lo que cambia es qué haría exactamente 
-si se activa.
+candidato descrito arriba — eXist-db no se activa por esto, solo cambia 
+qué haría exactamente si se activa.
 
 #### Flujo de actualización corregido
 
@@ -479,6 +445,48 @@ una búsqueda `LIKE` directa sobre PostgreSQL solo tiene sentido para casos
 triviales, y se descarta como método principal por las mismas razones ya 
 documentadas en la comparación PostgreSQL vs eXist-db del curso (no 
 entiende estructura, no distingue atributo de texto, no valida nada).
+
+### PostgreSQL — decisión activa y aplicable ya
+
+- **Desarrollo/pruebas**: contenedor Docker, mismo patrón ya practicado en 
+  el curso — `fase-2-bases-de-datos` lo levantó con 
+  `docker run --name ccms-postgres ...` (ver `1-README.md` de esa fase), y 
+  `fase-5-herramientas-vibe-coder` movió las credenciales de `database.py` 
+  a un `.env` fuera de Git (con `.env.example` como plantilla pública). 
+  `backend/database.py` de esta estructura ya está pensado para leer esas 
+  credenciales de un `.env` (mismo patrón). **Ya existen** el servicio 
+  `postgres` en `docker-compose.yml` (imagen `postgres:16`, sin 
+  configuración funcional) y `backend/.env.example` (con 
+  `POSTGRES_HOST`/`PORT`/`USER`/`PASSWORD`/`DB`, valores de ejemplo 
+  genéricos) — **no existe todavía** el `.env` real con credenciales, ni 
+  puertos/volúmenes reales en el `docker-compose.yml`.
+- **Producción**: instalación **nativa** en el servidor, no en contenedor 
+  — decisión explícita del proyecto, no el valor por defecto del curso (que 
+  usaba Docker sin más). PostgreSQL ya está en uso en este proyecto, así 
+  que esta decisión es aplicable ya, no condicionada a nada.
+- **Razón técnica**: PostgreSQL se beneficia de instalación optimizada 
+  directamente sobre el sistema operativo (gestión de memoria, rendimiento 
+  de E/S) frente a correr dentro de una capa de contenedor adicional en 
+  producción.
+
+### eXist-db — misma decisión de despliegue, pero sigue sin activar
+
+Esto es una decisión de **cómo se desplegaría eXist-db si se activa en el 
+futuro** — no implica activarlo ahora. `exist_db_client.py` sigue en el 
+mismo estatus descrito arriba (candidato, sin lógica real ni conexión); 
+esta sección cubre solo el despliegue, no el rol, que ya quedó corregido 
+justo antes.
+
+- **Desarrollo/pruebas**: contenedor Docker, mismo patrón que PostgreSQL. 
+  **Ya existe** el servicio `existdb` en `docker-compose.yml` (imagen 
+  `existdb/existdb:6`), marcado explícitamente con el comentario 
+  `# candidato, no activo` junto a su bloque — sin puertos, variables de 
+  entorno ni volúmenes reales, y sin ninguna variable en 
+  `backend/.env.example` todavía (no hace falta hasta que se active).
+- **Producción**: instalación **nativa** en el servidor, no en contenedor 
+  — misma razón técnica que PostgreSQL (gestión de memoria/E·S optimizada 
+  fuera de una capa de contenedor adicional), por ser también una base de 
+  datos con ese mismo perfil de carga.
 
 ### OpenSearch — confirmado, mismo criterio que PostgreSQL/eXist-db
 

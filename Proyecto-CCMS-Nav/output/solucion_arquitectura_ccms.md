@@ -40,7 +40,7 @@ flowchart TB
     end
 
     subgraph Datos["PostgreSQL — obligatorio, fuente de verdad"]
-        Core[("objetos_contenido · revisiones ·<br/>versiones · mapa_topic_refs ·<br/>baselines · estados · objeto_estado")]
+        Core[("objetos_contenido · autores ·<br/>revisiones · versiones ·<br/>mapa_topic_refs · baselines ·<br/>baseline_version · estados ·<br/>objeto_estado")]
         Proyectos[("proyecto<br/>regimen_gobernanza:<br/>navantia-contrato | atexis-interno<br/>— decisión A")]
         RBACdb[("roles · permisos · rol_permiso ·<br/>usuario_rol_proyecto<br/>— catálogo, decisión C")]
         Nuevas[("tareas · comentarios · auditoria<br/>— extensión sobre esquema del curso")]
@@ -52,9 +52,10 @@ flowchart TB
         Services -.->|"puebla en check-in<br/>RT-SL-2.3"| Indice
     end
 
-    ExistDB[("eXist-db — CANDIDATO REAL<br/>valida/navega el XML fuente de SIR<br/>keys · outputclass · conref/conkeyref<br/>RF-SL-1.3 · RT-SL-1.1 · RT-SL-2.7<br/>NO reemplaza ni convive con el<br/>indice derivado, es upstream de el")]
-    ValidXML -.->|"contrato de tabla N2 +<br/>resolucion keyref/conref del SIR"| ExistDB
-    ExistDB -.->|"upstream, antes de generar<br/>el indice derivado"| Indice
+    ExistDB[("eXist-db — CANDIDATO REAL<br/>valida XML de SIR al check-in<br/>Y persiste coleccion de objetos SIR<br/>navegable con XQuery<br/>keys · outputclass · conref/conkeyref<br/>RF-SL-1.3 · RT-SL-1.1 · RT-SL-2.7<br/>indice derivado sigue en Postgres,<br/>ExistDB no lo sustituye")]
+    ValidXML -.->|"1 validacion sincrona:<br/>outputclass, conref/conkeyref,<br/>referencias rotas"| ExistDB
+    ExistDB -.->|"2 si valido, genera<br/>indice derivado"| Indice
+    Services -.->|"3 si valido, persiste<br/>coleccion de objetos SIR"| ExistDB
 
     subgraph Busqueda["Busqueda avanzada — copia derivada"]
         OS["OpenSearch — instancia única<br/>código abierto"]
@@ -140,7 +141,7 @@ con las que simplemente se integra.
   más abajo) — dibujadas y justificadas, sin ser parte del alcance actual.
 - **Borde ámbar discontinuo — candidato real, con caso de uso concreto ya 
   identificado en los requisitos, pendiente de decisión de adopción**: 
-  **eXist-db** (ver "Índice de extracción de ServiLog" más abajo) — a 
+  **eXist-db** (ver "Persistencia de objetos SIR en eXist-db" más abajo) — a 
   diferencia del violeta, esta pieza ya tiene evidencia textual del docx 
   que la sustenta, no es solo un patrón heredado del curso sin caso de uso 
   propio.
@@ -180,18 +181,19 @@ se conecte.
 
 ### PostgreSQL — esquema base + extensiones de este proyecto
 
-El núcleo (`objetos_contenido`, `revisiones`, `versiones`, 
+El núcleo (`objetos_contenido`, `autores`, `revisiones`, `versiones`, 
 `mapa_topic_refs`, `baselines`, `baseline_version`, `estados`, 
-`objeto_estado`) es el esquema de `fase-2-bases-de-datos/
-2-construccion_esquema_bd.md` sin modificar — el propio docx confirma que 
+`objeto_estado` — las 9 entidades del diagrama entidad-relación) es el 
+esquema de `fase-2-bases-de-datos/2-construccion_esquema_bd.md` sin 
+modificar — el propio docx confirma que 
 encaja: RT-CMS-1.3 ("persistencia por objeto, no por elemento") y RF-CMS-
 3.1 ("modelo CCMS clásico: revisiones + estados") son exactamente el patrón 
 ya construido en el curso.
 
 Se añaden tres piezas nuevas, todas dentro del mismo PostgreSQL:
 - **`proyecto`** (con `regimen_gobernanza`): estructura obligatoria de la 
-  decisión A de tensiones — cada proyecto lleva su régimen de gobernanza 
-  explícito, y todo objeto de contenido cuelga de un proyecto.
+  decisión A de tensiones — detalle completo en "Aislamiento 
+  multi-proyecto/multi-cliente (decisión A)" más abajo.
 - **Catálogo RBAC** (`roles`, `permisos`, `rol_permiso`, 
   `usuario_rol_proyecto`): decisión C — roles y permisos como datos, no 
   como constantes, porque la lista de roles todavía no está cerrada.
@@ -219,10 +221,15 @@ que Elasticsearch en el curso — pero el propio requisito (RT-SL-2.1:
 mismo PostgreSQL**, no en un motor externo. Por eso, a diferencia de 
 Elasticsearch/OpenSearch, no aparece como servicio aparte en el diagrama.
 
-**eXist-db: candidato real para lo que alimenta ese índice, no para el 
-índice en sí.** Los objetos SIR (warning, caution, part, tool, lubricant…) 
-no son datos planos — viven como XML DITA con semántica estructural propia, 
-confirmado por tres requisitos concretos del docx:
+### Persistencia de objetos SIR en eXist-db — candidato, copia derivada FUERA de Postgres
+
+**eXist-db: candidato real que valida el XML fuente de los objetos SIR Y 
+persiste una copia de ellos — no solo un validador de paso.** A diferencia 
+del índice de extracción (sección anterior), que vive dentro del mismo 
+Postgres, la colección de objetos SIR de eXist-db —si se activa— es un 
+motor externo aparte. Los objetos SIR (warning, caution, part, tool, 
+lubricant…) no son datos planos — viven como XML DITA con semántica 
+estructural propia, confirmado por tres requisitos concretos del docx:
 
 - **RF-SL-1.3**: *"Reutilización por conref/conkeyref a nivel de dato, fila 
   o tabla desde los ditamaps de dosier."* `conref`/`conkeyref` son 
@@ -248,21 +255,50 @@ contrato de tabla N2 (outputclass + identificadores semánticos de fila/
 celda) y resolver keyref/conref del SIR antes de que esos valores se 
 vuelquen al índice relacional.
 
-**El matiz que fija dónde va la flecha en el diagrama**: RT-SL-2.1 ya deja 
-cerrado que el índice derivado en sí vive en PostgreSQL — eso no cambia. 
-eXist-db no sustituye esa tabla ni convive con ella como almacén alternativo 
-— es la pieza que **valida y navega el XML fuente de los objetos SIR aguas 
-arriba**, antes de que `Services` genere el índice hacia PostgreSQL en el 
-check-in. Por eso, en el diagrama, la flecha de eXist-db apunta hacia el 
-proceso de generación del índice (`ExistDB -.-> Indice`), nunca al revés, y 
-`ValidXML` (donde ya vive la validación DTD/XSD/Schematron/keyref/conref/
-href) es quien la invoca para el caso específico del contrato de tabla SIR.
+**El matiz que fija dónde van las flechas en el diagrama**: RT-SL-2.1 ya 
+deja cerrado que el índice derivado en sí vive en PostgreSQL — eso no 
+cambia, y eXist-db no sustituye esa tabla ni convive con ella como almacén 
+alternativo para el índice. Pero eXist-db sí guarda su propia copia de los 
+objetos SIR, en un flujo de tres pasos:
+
+1. **Validación síncrona al check-in** (`ValidXML -.-> ExistDB`): 
+   `ValidXML` (donde ya vive la validación DTD/XSD/Schematron/keyref/
+   conref/href) envía el XML del objeto SIR a eXist-db, que comprueba el 
+   contrato de tabla N2 (outputclass + identificadores semánticos de fila/
+   celda) y que conref/conkeyref resuelven sin referencias rotas.
+2. **Si es válido, se genera el índice derivado** (`ExistDB -.-> Indice`): 
+   los valores estructurales validados alimentan el índice de extracción 
+   en PostgreSQL (RT-SL-2.1 a 2.7) — igual que antes.
+3. **Si es válido, se persiste también el objeto SIR en eXist-db** 
+   (`Services -.-> ExistDB`): la colección de objetos SIR queda navegable 
+   con XQuery para consultas posteriores por etiqueta/key/estructura — el 
+   caso de uso original que motivó eXist-db (buscar keywords, controlar 
+   variables DITA) y que una validación puramente de paso, sin guardar 
+   nada, no cubría.
+
+Si el check-in NO es válido, se rechaza en el paso 1 y no se persiste nada 
+ni en el índice ni en eXist-db. La colección de eXist-db sigue siendo 
+**copia derivada y reconstruible desde PostgreSQL** (mismo patrón que 
+OpenSearch) — PostgreSQL sigue siendo la fuente de verdad de los objetos 
+SIR; si la colección de eXist-db se corrompiera, se reconstruye 
+reindexando desde ahí. El alcance es limitado, no "todo o nada": solo los 
+objetos SIR de ServiLog llevan esta copia — el resto del contenido (topics 
+normales, ditamaps) sigue el patrón ya cerrado de PostgreSQL como única 
+fuente, sin copia en eXist-db.
+
+**Cómo se consulta**: los objetos SIR se consultan contra eXist-db con 
+XQuery (mismo patrón de ejemplo ya construido en `fase-2-bases-de-datos/
+4-ejercicio_xmlBD.md` — FLWOR sobre `collection()`, navegando estructura 
+real), no con `LIKE` sobre PostgreSQL, que no entiende estructura ni 
+distingue atributo de texto. El resto del contenido sigue resolviendo 
+búsqueda por texto libre vía OpenSearch, como ya estaba decidido.
 
 Queda marcada como **candidato real, no activa todavía** (borde ámbar en el 
 diagrama): la necesidad está identificada y justificada con texto concreto 
 del docx, pero activarla es una decisión de implementación pendiente, igual 
 que en el curso — no se añade complejidad sin que el caso de uso esté 
-claro, y aquí ya lo está.
+claro, y aquí ya lo está. Esta es una corrección de **rol** (qué haría 
+eXist-db si se activa), no de **estatus** (sigue sin activarse).
 
 ### OpenSearch (no Elasticsearch) — búsqueda avanzada
 
@@ -437,7 +473,7 @@ que atraviesa todas las piezas de datos.
 | Versiones, baselines y ramas (+ diff) | `versiones`, `baselines`, `baseline_version` (Postgres) |
 | Gestor de tareas (asignación/reclamación, workflow, stepper) | `tareas`, `objeto_estado`, `estados` (Postgres) + RBAC |
 | Publicación (Publisher, cola de jobs) | `PublisherBox` (cola en BD + worker + DITA-OT) |
-| ServiLog (catálogo SIR, listados, trazabilidad, historial) | `Services` (ServiLog) + `objetos_contenido` + Índice de extracción (+ eXist-db, candidato, upstream) |
+| ServiLog (catálogo SIR, listados, trazabilidad, historial) | `Services` (ServiLog) + `objetos_contenido` + Índice de extracción (+ eXist-db, candidato, valida y persiste XML de SIR) |
 | Búsqueda avanzada (facetas + relevancia) | OpenSearch |
 | Reports & integridad (enlaces rotos, huérfanos, cobertura) | `ValidXML` + Índice de extracción |
 | Administración (usuarios/roles/auditoría/config estándar) | Catálogo RBAC + `auditoria` (Postgres) |
