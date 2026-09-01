@@ -226,6 +226,17 @@ extracción de ServiLog se deriva de XML DITA con semántica estructural
 propia. Existe como archivo para que la interfaz quede prevista, no para 
 que se implemente ya.
 
+**Corrección de alcance (ver detalle completo en "Infraestructura física" 
+más abajo)**: `exist_db_client.py` no es solo un validador de paso que 
+comprueba el XML al vuelo sin guardar nada — si se activa, persiste 
+también una copia de los objetos SIR como colección XML navegable con 
+XQuery, porque validar sin poder consultar después por etiqueta/key/
+estructura no cubre el caso de uso real que motivó eXist-db (buscar 
+keywords, controlar variables DITA). El alcance es limitado, no "todo o 
+nada": solo los objetos SIR de ServiLog llevarían esa copia; el resto del 
+contenido (topics normales, ditamaps) sigue sin copia en eXist-db, con 
+PostgreSQL como única fuente de verdad.
+
 ### `worker/` — proceso separado de publicación
 
 Deliberadamente fuera de `services/`: el diagrama de arquitectura dibuja 
@@ -358,8 +369,9 @@ deliberadamente de la estructura de tests porque no hay nada que probar. A
 diferencia de PostgreSQL, si mañana se levanta el contenedor de eXist-db, 
 **no pasa nada** — porque no existe ningún código que sepa hablar con él 
 todavía. Falta, además de la infraestructura física, todo el código de 
-aplicación: la lógica de `exist_db_client.py`, la llamada desde 
-`validacion/` que resolvería conref/conkeyref, y los tests 
+aplicación: la lógica de `exist_db_client.py` (que, si se activa, no es 
+solo validación de paso — ver corrección de rol más abajo), la llamada 
+desde `validacion/` que resolvería conref/conkeyref, y los tests 
 correspondientes.
 
 **Resumen**: "PostgreSQL sin desplegar" = falta solo el último paso 
@@ -412,6 +424,61 @@ confirmar si hace falta de verdad.
   — misma razón técnica que PostgreSQL (gestión de memoria/E·S optimizada 
   fuera de una capa de contenedor adicional), por ser también una base de 
   datos con ese mismo perfil de carga.
+
+### Corrección: eXist-db persiste los objetos SIR, no es solo validación 
+de paso
+
+Decisión anterior a corregir: "eXist-db valida el XML al vuelo sin guardar 
+ninguna copia". Esa decisión impedía consultar después por etiqueta/key/
+estructura XML — contradecía la necesidad original que motivó eXist-db 
+(buscar keywords, controlar variables DITA).
+
+**Decisión corregida — alcance limitado, no "todo o nada":**
+- La mayoría del contenido (topics normales, ditamaps) sigue el patrón ya 
+  decidido: PostgreSQL como única fuente de verdad, sin copia en eXist-db.
+- Específicamente los OBJETOS SIR de ServiLog (donde está el caso de uso 
+  real: keys, conref/conkeyref, contrato de tabla por outputclass) SÍ se 
+  persisten también en eXist-db, como colección de documentos XML 
+  navegables con XQuery.
+
+**Esto no contradice "copia derivada, PostgreSQL como fuente de verdad"**: 
+PostgreSQL sigue siendo la fuente de verdad de los objetos SIR — si la 
+colección de eXist-db se corrompiera, se reconstruye reindexando desde 
+PostgreSQL, mismo patrón ya aplicado con OpenSearch.
+
+Esto sigue siendo una corrección de **rol** dentro del mismo estatus de 
+candidato: eXist-db no se activa por esto — sigue "candidato real, no 
+activo todavía" (ver más arriba) — lo que cambia es qué haría exactamente 
+si se activa.
+
+#### Flujo de actualización corregido
+
+1. Check-in de un objeto SIR (vía `smartcms://`) → se escribe primero en 
+   PostgreSQL (`revisiones.contenido`) — fuente de verdad, append-only, 
+   como siempre.
+2. Antes de confirmar el check-in como válido, se envía el XML a eXist-db 
+   para validación SÍNCRONA: outputclass correcto, conref/conkeyref 
+   resuelven contra objetos existentes, sin referencias rotas (RT-SL-2.7 
+   exige que el índice dependa solo de keys/atributos/identificadores 
+   semánticos, no de heurísticas de texto).
+3. Si es válido: además de generar el índice derivado hacia PostgreSQL 
+   (RT-SL-2.1), se guarda/actualiza el objeto SIR también en la colección 
+   de eXist-db.
+4. Si NO es válido: el check-in se rechaza, no se persiste en ningún lado.
+
+#### Cómo se consulta un objeto XML por etiqueta/key/estructura
+
+Para objetos SIR: se consulta eXist-db con XQuery (mismo patrón de ejemplo 
+ya construido en `fase-2-bases-de-datos/4-ejercicio_xmlBD.md` — FLWOR 
+sobre `collection()`, navegando estructura real, no `LIKE` sobre texto 
+opaco).
+
+Para el resto del contenido (topics/ditamaps normales, sin copia en 
+eXist-db): la búsqueda por texto libre pasa por OpenSearch (ya decidido); 
+una búsqueda `LIKE` directa sobre PostgreSQL solo tiene sentido para casos 
+triviales, y se descarta como método principal por las mismas razones ya 
+documentadas en la comparación PostgreSQL vs eXist-db del curso (no 
+entiende estructura, no distingue atributo de texto, no valida nada).
 
 ### OpenSearch — confirmado, mismo criterio que PostgreSQL/eXist-db
 
