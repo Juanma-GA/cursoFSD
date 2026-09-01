@@ -276,15 +276,112 @@ han tomado todavía.
   (TypeScript) — equivalente, del lado cliente, a lo que schemas/ es del 
   lado backend.
 
+## Aclaración: OpenSearch ya es pieza activa, no pendiente de decidir
+
+**OpenSearch (instancia única) no es una decisión abierta** — quedó cerrada 
+en `solucion_arquitectura_ccms.md` (sección "OpenSearch (no Elasticsearch) 
+— búsqueda avanzada"), marcada `oss` (verde, activa) en el diagrama de 
+arquitectura. Esta estructura de carpetas ya lo refleja: `busqueda_service.py` 
+existe como un servicio de primera clase, con el mismo trato que cualquier 
+otro servicio activo (`proyectos_service.py`, `tareas_service.py`...) — su 
+comentario describe una responsabilidad real ("indexación incremental a 
+OpenSearch + consulta de facetas"), sin ninguna anotación de "candidato" ni 
+"futuro".
+
+**Matiz importante, para no confundir "activo" con "código ya escrito"**: 
+ahora mismo `busqueda_service.py` es, igual que el resto de archivos de 
+esta estructura, un archivo con un único comentario — todavía no existe 
+código de conexión real a OpenSearch, porque esta fase del proyecto era 
+explícitamente "solo estructura, sin lógica de implementación". Eso es 
+distinto de eXist-db: `busqueda_service.py` no lleva ninguna marca de 
+"candidato" porque su activación ya está decidida y solo falta 
+implementarla; `exist_db_client.py` sí lleva la marca "CANDIDATO REAL, no 
+activo todavía" en su propio comentario, porque ahí lo pendiente no es 
+solo escribir el código — es decidir si se activa.
+
+Lo que **sí** sigue siendo opcional/futuro sin caso de uso activo es 
+únicamente el **clúster con réplicas** de OpenSearch (la ruta de escalado 
+futura, distinta de la instancia única ya activa) y el LLM local — ninguno 
+de los dos tiene carpeta ni módulo en esta estructura, a propósito.
+
 ## Lo que NO se ha decidido en esta estructura (a propósito)
 
-- No hay carpeta ni módulo para el LLM local ni para el clúster de 
-  OpenSearch — ambos siguen "opcional/futuro" en la arquitectura, sin caso 
-  de uso activo; añadir estructura de código para ellos ahora sería 
-  anticipar una decisión no tomada.
+- No hay carpeta ni módulo para el LLM local ni para el **clúster con 
+  réplicas** de OpenSearch (no la instancia única, que ya está activa — ver 
+  aclaración arriba) — ambos siguen "opcional/futuro" en la arquitectura, 
+  sin caso de uso activo; añadir estructura de código para ellos ahora 
+  sería anticipar una decisión no tomada.
 - `exist_db_client.py` existe como archivo (para que la interfaz de 
   `validacion/` quede completa) pero no se activa ni se conecta a nada 
-  todavía — es "candidato real", no "implementado".
+  todavía — es "candidato real", no "implementado". **Confirmado que sigue 
+  así**: se preguntó explícitamente y la respuesta fue mantenerlo como 
+  candidato sin activar — solo se documentó cómo se desplegaría *si* se 
+  activa en el futuro (ver "Infraestructura física" más abajo).
 - No se ha decidido si `idp_navantia_saml.py` o `idp_navantia_oidc.py` es 
   el que finalmente se usa — ambos quedan como esqueleto hasta que Navantia 
   confirme el protocolo.
+
+## Infraestructura física: dónde viven las bases de datos
+
+Todo lo documentado hasta aquí es **código** (`routers/`, `services/`, 
+`storage/`, `models/`) — pero el código necesita algo corriendo detrás para 
+conectarse. Esa infraestructura física **no existe todavía** en esta 
+estructura (no hay `docker-compose.yml` con servicios definidos, ni 
+instalación nativa documentada) — lo que sigue es la decisión de **cómo** 
+se desplegará cada base de datos cuando llegue el momento, no la 
+infraestructura ya construida.
+
+### PostgreSQL — decisión activa y aplicable ya
+
+- **Desarrollo/pruebas**: contenedor Docker, mismo patrón ya practicado en 
+  el curso — `fase-2-bases-de-datos` lo levantó con 
+  `docker run --name ccms-postgres ...` (ver `1-README.md` de esa fase), y 
+  `fase-5-herramientas-vibe-coder` movió las credenciales de `database.py` 
+  a un `.env` fuera de Git (con `.env.example` como plantilla pública). 
+  `backend/database.py` de esta estructura ya está pensado para leer esas 
+  credenciales de un `.env` (mismo patrón), aunque el `.env`, el 
+  `.env.example` y el contenedor en sí no existen aún.
+- **Producción**: instalación **nativa** en el servidor, no en contenedor 
+  — decisión explícita del proyecto, no el valor por defecto del curso (que 
+  usaba Docker sin más). PostgreSQL ya está en uso en este proyecto, así 
+  que esta decisión es aplicable ya, no condicionada a nada.
+- **Razón técnica**: PostgreSQL se beneficia de instalación optimizada 
+  directamente sobre el sistema operativo (gestión de memoria, rendimiento 
+  de E/S) frente a correr dentro de una capa de contenedor adicional en 
+  producción.
+
+### eXist-db — misma decisión de despliegue, pero sigue sin activar
+
+Esto es una decisión de **cómo se desplegaría eXist-db si se activa en el 
+futuro** — no implica activarlo ahora. `exist_db_client.py` sigue siendo 
+exactamente lo que era: un archivo esqueleto marcado "candidato real, no 
+activo todavía", sin lógica real ni conexión — confirmado explícitamente: 
+sigue como candidato sin activar. La implementación real sigue pendiente de 
+confirmar si hace falta de verdad.
+
+- **Desarrollo/pruebas**: contenedor Docker, mismo patrón que PostgreSQL.
+- **Producción**: instalación **nativa** en el servidor, no en contenedor 
+  — misma razón técnica que PostgreSQL (gestión de memoria/E·S optimizada 
+  fuera de una capa de contenedor adicional), por ser también una base de 
+  datos con ese mismo perfil de carga.
+
+### OpenSearch — confirmado, mismo criterio que PostgreSQL/eXist-db
+
+Se preguntó explícitamente en vez de asumir: **nativo en producción**, 
+igual que PostgreSQL y eXist-db — criterio uniforme para las tres bases de 
+datos, no solo para las dos relacionales/XML.
+
+- **Desarrollo/pruebas**: contenedor Docker, mismo patrón que las otras dos.
+- **Producción**: instalación **nativa** en el servidor, no en contenedor 
+  — misma razón técnica (rendimiento optimizado directamente sobre el 
+  sistema operativo). Se descarta mantener Docker/Kubernetes en producción 
+  pese a que la futura ruta de escalado (clúster con réplicas) sea 
+  precisamente el escenario donde un orquestador de contenedores suele 
+  preferirse por facilidad de gestión — decisión consciente, no por 
+  defecto.
+
+**Lo que falta generar en cualquier caso**: un `docker-compose.yml` (o 
+equivalente) en la raíz de `app/` que orqueste los contenedores de 
+desarrollo — hoy `docker-compose.yml` existe como archivo pero solo con un 
+comentario `# TODO`, sin ningún servicio definido. Queda marcado como 
+pendiente explícito, no generado en esta revisión.
