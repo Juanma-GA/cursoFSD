@@ -335,6 +335,41 @@ funcional en `docker-compose.yml`, y no hay instalación nativa documentada
 para producción. Lo que sigue es la decisión de **cómo** se desplegará cada 
 base de datos cuando llegue el momento de completar esos marcadores.
 
+### Aclaración importante: "sin desplegar" no significa lo mismo para las 
+tres bases de datos
+
+A las tres les falta la infraestructura física corriendo (contenedor 
+levantado, `.env` real con credenciales) — eso es común a las tres. Pero la 
+similitud termina ahí:
+
+**PostgreSQL — activo, con código funcionando, solo falta levantarlo 
+físicamente.** `backend/storage/` (los 13 módulos) ya tiene lógica real 
+pensada para hablar con PostgreSQL vía SQLAlchemy. `backend/database.py` ya 
+está preparado para leer credenciales de un `.env`. Los 17 archivos de 
+`integration/` en `tests/` están diseñados para probar el ciclo completo 
+HTTP→router→service→storage→SQLite. Si mañana se levanta el contenedor de 
+PostgreSQL y se crea el `.env` real, el sistema funciona de verdad para 
+todo lo relacionado con PostgreSQL — no falta nada más.
+
+**eXist-db — candidato, sin ningún código de aplicación todavía.** 
+`exist_db_client.py` no tiene lógica real, solo un comentario. Ningún 
+`service` de los 16 lo llama. `test_exist_db_client.py` se omitió 
+deliberadamente de la estructura de tests porque no hay nada que probar. A 
+diferencia de PostgreSQL, si mañana se levanta el contenedor de eXist-db, 
+**no pasa nada** — porque no existe ningún código que sepa hablar con él 
+todavía. Falta, además de la infraestructura física, todo el código de 
+aplicación: la lógica de `exist_db_client.py`, la llamada desde 
+`validacion/` que resolvería conref/conkeyref, y los tests 
+correspondientes.
+
+**Resumen**: "PostgreSQL sin desplegar" = falta solo el último paso 
+(infraestructura). "eXist-db sin activar" = falta todo (infraestructura Y 
+código de aplicación) — su justificación técnica es sólida (ver sección de 
+justificación de eXist-db más arriba en este documento), pero eso no 
+implica que esté listo para construirse ya. Mismo criterio ya aplicado en 
+el checkpoint de microservicios del curso: una justificación válida no es 
+lo mismo que una necesidad medida y actual.
+
 ### PostgreSQL — decisión activa y aplicable ya
 
 - **Desarrollo/pruebas**: contenedor Docker, mismo patrón ya practicado en 
